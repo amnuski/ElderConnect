@@ -4,6 +4,6 @@ import { useRouter } from "expo-router";
 
 export default function HomeScreen() {
 
-   // Expo Router hook
+   
 }
 
