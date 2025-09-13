@@ -5,8 +5,10 @@ import { useRouter } from "expo-router";
 export default function HomeScreen() {
  return (
         <View>
-            Abiraj
+            <Text>Home Screen</Text>
+            <Text>Screen</Text>
         </View>
+
     )
 }
 
