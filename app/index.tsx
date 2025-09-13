@@ -5,8 +5,12 @@ import { useRouter } from "expo-router";
 export default function HomeScreen() {
     return (
         <View>
-            Nuski send to test
+        <Text>
+            Nuski
+        </Text>
+            Merge with test
         </View>
+
     )
 
 }
