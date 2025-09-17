@@ -51,7 +51,7 @@ export default function OtpScreen() {
     if (code.length === 4) {
       Alert.alert("OTP Entered", code);
       // Example success: navigate to home (update path as needed)
-      router.push("/");
+      router.push("/role-selection");
     } else {
       Alert.alert("Error", "Please enter all 4 digits.");
     }
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 14,
-    color: "#344E41",
+    color: "#0422229b",
     textAlign: "center",
     marginBottom: 30,
   },
@@ -137,14 +137,15 @@ const styles = StyleSheet.create({
   },
   otpInput: {
     borderWidth: 1,
-    borderColor: "#7CA986",
-    backgroundColor: "#A8E6A1",
+    borderColor: "#042222ff",
+    backgroundColor: "#B6DDB3",
     borderRadius: 12,
     width: 55,
-    height: 55,
+    height: 75,
     textAlign: "center",
     fontSize: 20,
     color: "#042222",
+    padding:20,
   },
   verifyButton: {
     backgroundColor: "#042222",

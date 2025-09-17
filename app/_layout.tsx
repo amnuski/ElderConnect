@@ -34,6 +34,7 @@ export default function RootLayout() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="phone-number" />
         <Stack.Screen name="otp" />
+        <Stack.Screen name="role-selection" />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
