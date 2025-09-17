@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 28,
     color: "#042222",
-    marginTop: -20,
+    marginTop: -30,
   },
   languageBox: {
     position: "absolute",

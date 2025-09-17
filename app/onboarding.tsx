@@ -53,7 +53,7 @@ export default function OnboardingScreen() {
         <TouchableOpacity
           style={styles.button}
           activeOpacity={0.8}
-          // onPress={() => router.push("/(tabs)/verify-num")} // ✅ Navigate using router
+          onPress={() => router.push("/verify-num")} // ✅ Navigate using router
         >
           <Text style={[styles.buttonText, { fontFamily: "ArimaMadurai_400Regular" }]}>
             Get Started
