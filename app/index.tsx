@@ -6,9 +6,9 @@ export default function HomeScreen() {
     return (
         <View>
         <Text>
-            Nuski
+            main
         </Text>
-            Merge with test
+           
         </View>
 
     )
