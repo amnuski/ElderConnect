@@ -28,13 +28,12 @@ export default function EmergencyScreen() {
         <EmergencyButton title="Police" />
       </View>
 
-      {/* Bottom Navigation */}
-      
-        {/* Empty space so icons stay balanced */}
-      
+      {/* Floating Buttons */}
+      <TouchableOpacity style={styles.floatingButtonLeft}>
+        <Icon name="account-plus" size={28} color="#fff" />
+      </TouchableOpacity>
 
-      {/* Floating Emergency Button */}
-    
+      
     </SafeAreaView>
   );
 }
@@ -65,14 +64,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
     flex: 1,
-    marginTop:35,
+    marginTop: 35,
   },
   buttonContainer: {
     flex: 1,
     justifyContent: "center",
     gap: 20,
     paddingHorizontal: 30,
-    paddingBottom: 100, // more space to avoid overlap with floating button
+    paddingBottom: 100,
   },
   emergencyCard: {
     backgroundColor: "#003d2d",
@@ -89,18 +88,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
-  bottomNav: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#ddd",
-  },
-  floatingButton: {
+  floatingButtonLeft: {
     position: "absolute",
-    bottom: 60, // sits above bottomNav
+    bottom: 30,
+    right: 20,
+    backgroundColor: "#003d2d",
+    padding: 16,
+    borderRadius: 50,
+    elevation: 5,
+  },
+  floatingButtonCenter: {
+    position: "absolute",
+    bottom: 30,
     alignSelf: "center",
     backgroundColor: "red",
     padding: 16,
