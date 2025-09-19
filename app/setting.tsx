@@ -43,10 +43,14 @@ export default function SettingsScreen() {
           {/* Menu List */}
           <View style={styles.menu}>
             <MenuItem title="Edit Profile" icon="person-outline" />
-            <MenuItem title="Language" icon="language-outline" />
-            <MenuItem title="Add Family Members" icon="people-outline" />
+            <MenuItem title="Language" icon="language-outline" onPress={() => router.push('/setLanguage')} />
+            <MenuItem 
+                title="Add Family Members" 
+                icon="people-outline" 
+                onPress={() => router.push('/addFamily')} // 👈 navigate here
+  />
             <MenuItem title="Add Drivers" icon="car-outline" />
-            <MenuItem title="Emergency Add" icon="alert-circle-outline" danger />
+            <MenuItem title="Emergency Add" icon="alert-circle-outline" danger  onPress={() => router.push('/emergencyAdd')} />
           </View>
         </ScrollView>
       </View>
@@ -59,19 +63,22 @@ type MenuItemProps = {
   title: string;
   icon: string;
   danger?: boolean;
+  onPress?: () => void;
 };
 
-function MenuItem({ title, icon, danger = false }: MenuItemProps) {
+function MenuItem({ title, icon, danger = false , onPress }: MenuItemProps) {
   const handlePress = () => {
     console.log(`${title} pressed`);
     // You can add specific navigation for each menu item here
-    // Example: router.push('/edit-profile') for Edit Profile
+   
   };
 
   return (
     <TouchableOpacity 
       style={[styles.menuItem, danger && styles.dangerItem]}
-      onPress={handlePress}
+      onPress={onPress}
+     
+
     >
       <View style={styles.menuLeft}>
         <Ionicons
