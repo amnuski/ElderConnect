@@ -12,7 +12,7 @@ export default function Main() {
         
         <Button
           title="Go to Settings"
-          onPress={() => router.push('/setting')}
+          onPress={() => router.push('../setting')}
           
         />
         

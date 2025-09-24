@@ -42,15 +42,15 @@ export default function SettingsScreen() {
           
           {/* Menu List */}
           <View style={styles.menu}>
-            <MenuItem title="Edit Profile" icon="person-outline" />
-            <MenuItem title="Language" icon="language-outline" onPress={() => router.push('/setLanguage')} />
+            <MenuItem title="Edit Profile" icon="person-outline" onPress={() => router.push('../profile')} />
+            <MenuItem title="Language" icon="language-outline" onPress={() => router.push('../setLanguage')} />
             <MenuItem 
                 title="Add Family Members" 
                 icon="people-outline" 
-                onPress={() => router.push('/addFamily')} // 👈 navigate here
+                onPress={() => router.push('../addFamily')} // 👈 navigate here
   />
             <MenuItem title="Add Drivers" icon="car-outline" />
-            <MenuItem title="Emergency Add" icon="alert-circle-outline" danger  onPress={() => router.push('/emergencyAdd')} />
+            <MenuItem title="Emergency Add" icon="alert-circle-outline" danger  onPress={() => router.push('../emergencyAdd')} />
           </View>
         </ScrollView>
       </View>
