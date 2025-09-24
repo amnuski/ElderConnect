@@ -90,7 +90,7 @@ export default function WelcomeScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.button}
-        onPress={() => router.push("/onboarding")}>
+        onPress={() => router.push("/Welcoming_screen/onboarding")}>
           <Text style={[styles.buttonText, { fontFamily: "ArimaMadurai_400Regular" }]}>
             English
           </Text>
@@ -153,4 +153,3 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
 });
-

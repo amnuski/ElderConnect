@@ -7,6 +7,7 @@ import { KaushanScript_400Regular } from "@expo-google-fonts/kaushan-script";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Keyboard,
   Platform,
@@ -29,6 +30,7 @@ export default function PhoneNumberScreen() {
   const [countryCode, setCountryCode] = useState<CountryCode>("LK"); // default Sri Lanka
   const [callingCode, setCallingCode] = useState("94");
   const [showPicker, setShowPicker] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
@@ -47,9 +49,19 @@ export default function PhoneNumberScreen() {
     const fullNumber = `+${callingCode}${phoneNumber}`;
     console.log(`Sending code to: ${fullNumber}`);
 
-    Alert.alert("Code Sent", `OTP sent to ${fullNumber}`);
+    setLoading(true);
 
-    router.push("/otp"); // navigate to OTP screen
+    // Simulate sending OTP
+    setTimeout(() => {
+      setLoading(false);
+      Alert.alert("Code Sent", `OTP sent to ${fullNumber}`);
+
+      // Navigate to OTP screen with phone number as param
+      router.push({
+        pathname: "/Welcoming_screen/otp",
+        params: { phone: fullNumber },
+      });
+    }, 1000);
   };
 
   return (
@@ -59,7 +71,6 @@ export default function PhoneNumberScreen() {
         style={styles.container}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
-        
       >
         <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
@@ -76,7 +87,7 @@ export default function PhoneNumberScreen() {
           {/* Logo */}
           <View style={styles.header}>
             <Image
-              source={require("../assets/images/elderconnect-logo.png")}
+              source={require("../../assets/images/elderconnect-logo.png")}
               style={styles.logo}
               resizeMode="contain"
             />
@@ -132,6 +143,7 @@ export default function PhoneNumberScreen() {
               onPress={handleSendCode}
               activeOpacity={0.85}
               style={{ width: "100%" }}
+              disabled={loading}
             >
               <LinearGradient
                 colors={["#042222", "#042222"]}
@@ -139,9 +151,13 @@ export default function PhoneNumberScreen() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Text style={[styles.sendButtonText, { fontFamily: "ArimaMadurai_700Bold" }]}>
-                  Send Code
-                </Text>
+                {loading ? (
+                  <ActivityIndicator color="#B8DEB5" />
+                ) : (
+                  <Text style={[styles.sendButtonText, { fontFamily: "ArimaMadurai_700Bold" }]}>
+                    Send Code
+                  </Text>
+                )}
               </LinearGradient>
             </TouchableOpacity>
           </View>

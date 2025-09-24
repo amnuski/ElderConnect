@@ -11,6 +11,7 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
+  // Load custom fonts
   const [fontsLoaded, fontError] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
@@ -29,13 +30,21 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
-        {/* Screens */}
+        {/* Root Screens */}
         <Stack.Screen name="index" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="phone-number" />
         <Stack.Screen name="otp" />
         <Stack.Screen name="role-selection" />
+        <Stack.Screen name="profile-info" />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+        {/* Family Screens */}
+        <Stack.Screen name="Family/schedule_page" />
+        <Stack.Screen name="Family/dash" />
+        <Stack.Screen name="Family/add_schedule" />
+
+        {/* Fallback for unknown routes */}
         <Stack.Screen name="+not-found" />
       </Stack>
 

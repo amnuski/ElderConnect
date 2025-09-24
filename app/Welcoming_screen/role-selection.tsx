@@ -1,23 +1,23 @@
-import React, { useRef, useState } from "react";
-import {
-  StyleSheet,
-  Text,
-  View,
-  Image,
-  TouchableOpacity,
-  StatusBar,
-  Dimensions,
-  ScrollView,
-  Animated,
-  ActivityIndicator,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
 import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
   useFonts,
 } from "@expo-google-fonts/arima-madurai";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import { useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 const { width } = Dimensions.get("window");
 
@@ -27,12 +27,14 @@ export default function RoleSelectionScreen() {
   const buttonOpacity = useRef(new Animated.Value(0)).current;
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
 
+  // Animated value for checkmark
+  const checkAnim = useRef(new Animated.Value(0)).current;
+
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
 
-  // Show loader until fonts are ready (avoids hook order bug)
   if (!fontsLoaded) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -63,14 +65,22 @@ export default function RoleSelectionScreen() {
   ];
 
   const handleSelectRole = (roleKey: string, index: number) => {
-    // if same role clicked again → unselect
     if (selectedRole === roleKey) {
+      // unselect without scrolling back
       setSelectedRole(null);
-      Animated.timing(buttonOpacity, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+
+      Animated.parallel([
+        Animated.timing(buttonOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(checkAnim, {
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
       return;
     }
 
@@ -81,11 +91,17 @@ export default function RoleSelectionScreen() {
       animated: true,
     });
 
-    Animated.timing(buttonOpacity, {
-      toValue: 1,
-      duration: 400,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.timing(buttonOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.spring(checkAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   return (
@@ -130,11 +146,11 @@ export default function RoleSelectionScreen() {
                   resizeMode="contain"
                 />
               </View>
-              <Text
-                style={[styles.roleName, { fontFamily: "ArimaMadurai_700Bold" }]}
-              >
+
+              <Text style={[styles.roleName, { fontFamily: "ArimaMadurai_700Bold" }]}>
                 {role.label}
               </Text>
+
               <Text
                 style={[
                   styles.roleDesc,
@@ -144,11 +160,28 @@ export default function RoleSelectionScreen() {
                 {role.description}
               </Text>
 
-              {isSelected && (
-                <View style={styles.checkMark}>
-                  <Text style={styles.checkText}>✓</Text>
-                </View>
-              )}
+              {/* Animated Checkmark */}
+              <Animated.View
+                style={[
+                  styles.checkMark,
+                  {
+                    opacity: checkAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, isSelected ? 1 : 0],
+                    }),
+                    transform: [
+                      {
+                        scale: checkAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.5, 1],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <Text style={styles.checkText}>✓</Text>
+              </Animated.View>
             </TouchableOpacity>
           );
         })}
@@ -164,7 +197,7 @@ export default function RoleSelectionScreen() {
         {selectedRole && (
           <TouchableOpacity
             style={styles.continueButton}
-            onPress={() => router.push("/")}
+            onPress={() => router.push("/Welcoming_screen/profile-info")}
           >
             <Text
               style={[
@@ -197,8 +230,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
   },
   card: {
-    width: width * 0.7,
-    height: 500,
+    width: width * 0.56,
+    height: 450,
     backgroundColor: "#042222",
     borderRadius: 200,
     paddingVertical: 40,
@@ -221,13 +254,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   selectedCircleWrapper: {
-    borderWidth: 0,
-    borderColor: "#55c560ff",
     shadowColor: "#338f3cff",
     shadowOpacity: 0.6,
     shadowRadius: 10,
     elevation: 8,
-   
   },
   image: {
     width: "100%",
@@ -245,7 +275,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
   },
   checkMark: {
-    marginTop: 105,
+    marginTop: 70,
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -263,6 +293,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 25,
     marginTop: 30,
+    marginBottom:40,
     width: "70%",
     alignItems: "center",
   },
