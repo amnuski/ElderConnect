@@ -6,11 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
-  ListRenderItem,
   Dimensions,
-  Platform,
   SafeAreaView,
   StatusBar as RNStatusBar,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -50,7 +49,7 @@ export default function FamilyPage() {
     setFamily((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const renderItem: ListRenderItem<FamilyMember> = ({ item }) => (
+  const renderItem = ({ item }: { item: FamilyMember }) => (
     <View style={styles.memberCard}>
       <View style={styles.memberDetails}>
         <Text style={styles.memberName}>{item.name}</Text>
@@ -59,13 +58,13 @@ export default function FamilyPage() {
 
       <View style={styles.memberActions}>
         <TouchableOpacity style={styles.iconBtn}>
-          <Ionicons name="create-outline" size={22} color="white" />
+          <Ionicons name="create-outline" size={20} color="white" />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.iconBtn}
           onPress={() => deleteMember(item.id)}
         >
-          <Ionicons name="trash-outline" size={22} color="white" />
+          <Ionicons name="trash-outline" size={20} color="white" />
         </TouchableOpacity>
       </View>
     </View>
@@ -88,7 +87,7 @@ export default function FamilyPage() {
           <Ionicons name="chevron-back" size={28} color="black" />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>Add Your Family Members</Text>
+        <Text style={styles.headerTitle}>Add Family Members</Text>
 
         <TouchableOpacity style={styles.headerIcon}>
           <Ionicons name="notifications-outline" size={28} color="black" />
@@ -98,14 +97,14 @@ export default function FamilyPage() {
       {/* Inputs */}
       <View style={styles.inputSection}>
         <TextInput
-          placeholder="Relation Phone Number"
+          placeholder="Phone Number"
           value={phone}
           onChangeText={setPhone}
           style={styles.input}
           keyboardType="phone-pad"
         />
         <TextInput
-          placeholder="Relation Status"
+          placeholder="Relation"
           value={relation}
           onChangeText={setRelation}
           style={styles.input}
@@ -139,16 +138,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#e6f2e6",
     paddingTop: Platform.OS === "android" ? RNStatusBar.currentHeight : 0,
-    paddingHorizontal: width * 0.05,
+    paddingHorizontal: 20,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginVertical: height * 0.02,
+    justifyContent: "space-between",
+    marginVertical: 15,
   },
   headerTitle: {
-    fontSize: width * 0.05,
+    fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
     flex: 1,
@@ -159,23 +158,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   inputSection: {
-    marginBottom: height * 0.02,
+    marginBottom: 15,
   },
   input: {
     backgroundColor: "#d6e9d6",
     borderRadius: 10,
-    paddingVertical: height * 0.015,
-    paddingHorizontal: width * 0.035,
-    marginVertical: height * 0.008,
-    fontSize: width * 0.04,
-    elevation: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    marginVertical: 6,
+    fontSize: 16,
+    elevation: 1,
   },
   connectBtn: {
     backgroundColor: "#04302b",
-    paddingVertical: height * 0.015,
+    paddingVertical: 12,
     borderRadius: 10,
     alignItems: "center",
-    marginTop: height * 0.015,
+    marginTop: 10,
   },
   connectBtnText: {
     color: "white",
@@ -186,13 +185,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   familyListContainer: {
-    paddingBottom: height * 0.03,
+    paddingBottom: 20,
   },
   memberCard: {
-    backgroundColor: "#00584aff",
-    borderRadius: 12,
-    padding: width * 0.04,
-    marginVertical: height * 0.005,
+    backgroundColor: "#00584a",
+    borderRadius: 10,
+    padding: 15,
+    marginVertical: 6,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -203,17 +202,17 @@ const styles = StyleSheet.create({
   memberName: {
     color: "white",
     fontWeight: "600",
-    fontSize: width * 0.045,
+    fontSize: 16,
   },
   memberRelation: {
     color: "lightgray",
-    fontSize: width * 0.035,
+    fontSize: 14,
   },
   memberActions: {
     flexDirection: "row",
     alignItems: "center",
   },
   iconBtn: {
-    marginLeft: width * 0.03,
+    marginLeft: 10,
   },
 });

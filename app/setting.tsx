@@ -49,7 +49,7 @@ export default function SettingsScreen() {
                 icon="people-outline" 
                 onPress={() => router.push('../addFamily')} // 👈 navigate here
   />
-            <MenuItem title="Add Drivers" icon="car-outline" />
+            <MenuItem title="Add Drivers" icon="car-outline" onPress={() => router.push('../addDriver')} />
             <MenuItem title="Emergency Add" icon="alert-circle-outline" danger  onPress={() => router.push('../emergencyAdd')} />
           </View>
         </ScrollView>
