@@ -51,7 +51,7 @@ export default function OtpScreen() {
     if (code.length === 4) {
       Alert.alert("OTP Entered", code);
       // Example success: navigate to home (update path as needed)
-      router.push("/role-selection");
+      router.push("/Welcoming_screen/role-selection");
     } else {
       Alert.alert("Error", "Please enter all 4 digits.");
     }

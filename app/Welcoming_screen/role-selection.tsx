@@ -197,7 +197,7 @@ export default function RoleSelectionScreen() {
         {selectedRole && (
           <TouchableOpacity
             style={styles.continueButton}
-            onPress={() => router.push("/profile-info")}
+            onPress={() => router.push("/Welcoming_screen/profile-info")}
           >
             <Text
               style={[

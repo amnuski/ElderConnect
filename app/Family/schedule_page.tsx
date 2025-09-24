@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts, ArimaMadurai_400Regular, ArimaMadurai_700Bold } from '@expo-google-fonts/arima-madurai';
-import Footer from './footer';
+import Footer from '../Footer/footer';
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 interface ScheduleEvent {
@@ -398,7 +398,7 @@ export default function SchedulePage() {
       </ScrollView>
 
       {/* Add Button */}
-      <TouchableOpacity style={styles.addButton} onPress={() => router.push("/add_schedule")}>
+      <TouchableOpacity style={styles.addButton} onPress={() => router.push("../add_schedule")}>
         <Text style={styles.addButtonText}>Add</Text>
       </TouchableOpacity>
 

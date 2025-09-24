@@ -22,5 +22,5 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-, "app/role-selection.tsx"  ]
+, "app/Welcoming_screen/role-selection.tsx"  ]
 }

@@ -1,18 +1,18 @@
-import React, { useState } from 'react';
+import { ArimaMadurai_400Regular, ArimaMadurai_700Bold, useFonts } from '@expo-google-fonts/arima-madurai';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from "expo-linear-gradient";
+import { useState } from 'react';
 import {
-  View,
-  Text,
+  Alert,
+  SafeAreaView,
+  ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  SafeAreaView,
-  Alert,
+  View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useFonts, ArimaMadurai_400Regular, ArimaMadurai_700Bold } from '@expo-google-fonts/arima-madurai';
-import Footer from './footer';
-import { LinearGradient } from "expo-linear-gradient";
+import Footer from '../Footer/footer';
 
 interface ScheduleEvent {
   id: string;

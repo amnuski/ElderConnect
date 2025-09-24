@@ -1,4 +1,4 @@
-// app/profile-info.tsx
+// app/Welcoming_screen/profile-info.tsx
 import React, { useState } from "react";
 import {
   View,
@@ -13,7 +13,11 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useFonts, ArimaMadurai_400Regular, ArimaMadurai_700Bold } from "@expo-google-fonts/arima-madurai";
+import {
+  useFonts,
+  ArimaMadurai_400Regular,
+  ArimaMadurai_700Bold,
+} from "@expo-google-fonts/arima-madurai";
 import { useRouter } from "expo-router";
 
 export default function ProfileInfoScreen() {
@@ -27,7 +31,7 @@ export default function ProfileInfoScreen() {
     ArimaMadurai_700Bold,
   });
 
-  if (!fontsLoaded) return null; // or a loading indicator
+  if (!fontsLoaded) return null;
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -48,7 +52,7 @@ export default function ProfileInfoScreen() {
       return;
     }
     console.log("Submitted:", { firstName, imageUri });
-    router.push("/role-selection");
+    router.push("/Family/dash");
   };
 
   return (
@@ -64,7 +68,7 @@ export default function ProfileInfoScreen() {
       >
         {/* Back button */}
         <TouchableOpacity
-          onPress={() => router.push("/role-selection")}
+          onPress={() => router.push("/Welcoming_screen/verify-num")}
           style={styles.backButton}
         >
           <Ionicons name="arrow-back" size={24} color="#042222" />
@@ -88,7 +92,7 @@ export default function ProfileInfoScreen() {
             source={
               imageUri
                 ? { uri: imageUri }
-                : require("../assets/images/profile.png")
+                : require("../../assets/images/profile.png") // ✅ FIXED
             }
             style={styles.profileImage}
           />
