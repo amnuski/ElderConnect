@@ -22,7 +22,7 @@ export default function EditProfileScreen() {
       </View>
 
       {/* Profile Image */}
-      <View style={styles.profileImageContainer}>
+      {/* <View style={styles.profileImageContainer}>
         <View style={styles.profileImageWrapper}>
           <Image
             source={require('../assets/images/elder.png')} // Replace with your asset or user image
@@ -32,7 +32,7 @@ export default function EditProfileScreen() {
             <Ionicons name="camera" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
-      </View>
+      </View> */}
 
       {/* Form */}
       <View style={styles.form}>

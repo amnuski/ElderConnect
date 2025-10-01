@@ -10,7 +10,8 @@ import {
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";  
+import { router } from "expo-router"; 
+ 
 
 const { width } = Dimensions.get("window");
 

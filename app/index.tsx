@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import { View, Button, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -13,6 +13,10 @@ export default function Main() {
         <Button
           title="Go to Settings"
           onPress={() => router.push('../setting/setting')}
+        />
+         <Button
+          title="Go to map"
+          onPress={() => router.push('../map/Location_screen')}
         />
      
         
