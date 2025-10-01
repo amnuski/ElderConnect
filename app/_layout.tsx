@@ -37,6 +37,7 @@ export default function RootLayout() {
         <Stack.Screen name="otp" />
         <Stack.Screen name="role-selection" />
         <Stack.Screen name="profile-info" />
+        <Stack.Screen name="driver-profile" />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
         {/* Family Screens */}
@@ -44,8 +45,9 @@ export default function RootLayout() {
         <Stack.Screen name="Family/dash" />
         <Stack.Screen name="Family/add_schedule" />
 
-        {/* Fallback for unknown routes */}
-        <Stack.Screen name="+not-found" />
+       {/* Driver Screens */}
+        <Stack.Screen name="Driver/dashboard" />
+        
       </Stack>
 
       {/* StatusBar adapts to theme */}

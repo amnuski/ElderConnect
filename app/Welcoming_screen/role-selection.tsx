@@ -51,9 +51,9 @@ export default function RoleSelectionScreen() {
       image: require("@/assets/images/elder.png"),
     },
     {
-      key: "caregiver",
-      label: "Caregiver",
-      description: "Hi, I am a Caregiver\nI want to assist elders.",
+      key: "driver", // driver role
+      label: "Driver",
+      description: "Hi, I am a Driver\nI want to assist elders.",
       image: require("@/assets/images/caregiver.png"),
     },
     {
@@ -104,6 +104,14 @@ export default function RoleSelectionScreen() {
     ]).start();
   };
 
+  const handleContinue = () => {
+    if (selectedRole === "elder" || selectedRole === "family") {
+      router.push("/Welcoming_screen/profile-info");
+    } else if (selectedRole === "driver") {
+      router.push("/Welcoming_screen/driver-profile");
+    }
+  };
+
   return (
     <LinearGradient
       colors={["#FFFFFF", "#B6DDB3"]}
@@ -111,7 +119,11 @@ export default function RoleSelectionScreen() {
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
     >
-      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+      <StatusBar
+        barStyle="dark-content"
+        translucent
+        backgroundColor="transparent"
+      />
 
       <Text style={[styles.title, { fontFamily: "ArimaMadurai_700Bold" }]}>
         Choose Yourself
@@ -147,7 +159,12 @@ export default function RoleSelectionScreen() {
                 />
               </View>
 
-              <Text style={[styles.roleName, { fontFamily: "ArimaMadurai_700Bold" }]}>
+              <Text
+                style={[
+                  styles.roleName,
+                  { fontFamily: "ArimaMadurai_700Bold" },
+                ]}
+              >
                 {role.label}
               </Text>
 
@@ -197,7 +214,7 @@ export default function RoleSelectionScreen() {
         {selectedRole && (
           <TouchableOpacity
             style={styles.continueButton}
-            onPress={() => router.push("/Welcoming_screen/profile-info")}
+            onPress={handleContinue}
           >
             <Text
               style={[
@@ -293,7 +310,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 25,
     marginTop: 30,
-    marginBottom:40,
+    marginBottom: 40,
     width: "70%",
     alignItems: "center",
   },
