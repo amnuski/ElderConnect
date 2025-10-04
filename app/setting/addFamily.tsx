@@ -3,23 +3,31 @@ import {
   View,
   Text,
   TextInput,
+  TextInputProps,
   TouchableOpacity,
   StyleSheet,
   FlatList,
-  Dimensions,
   SafeAreaView,
   StatusBar as RNStatusBar,
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-
-const { width, height } = Dimensions.get("window");
+import {
+  useFonts,
+  ArimaMadurai_400Regular,
+  ArimaMadurai_700Bold,
+} from "@expo-google-fonts/arima-madurai";
 
 type FamilyMember = {
   id: string;
   name: string;
   relation: string;
+};
+
+// ✅ Custom TextInput to apply ArimaMadurai font to input and placeholder
+const AppTextInput: React.FC<TextInputProps> = (props) => {
+  return <TextInput {...props} style={[{ fontFamily: "ArimaMadurai_400Regular" }, props.style]} />;
 };
 
 export default function FamilyPage() {
@@ -30,6 +38,13 @@ export default function FamilyPage() {
     { id: "1", name: "Kavi", relation: "Son" },
     { id: "2", name: "Ashu", relation: "Son" },
   ]);
+
+  const [fontsLoaded] = useFonts({
+    ArimaMadurai_400Regular,
+    ArimaMadurai_700Bold,
+  });
+
+  if (!fontsLoaded) return null;
 
   const addFamily = () => {
     if (phone && relation && name) {
@@ -58,13 +73,13 @@ export default function FamilyPage() {
 
       <View style={styles.memberActions}>
         <TouchableOpacity style={styles.iconBtn}>
-          <Ionicons name="create-outline" size={20} color="white" />
+          <Ionicons name="create-outline" size={20} color="#04302B" />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.iconBtn}
           onPress={() => deleteMember(item.id)}
         >
-          <Ionicons name="trash-outline" size={20} color="white" />
+          <Ionicons name="trash-outline" size={20} color="#B00020" />
         </TouchableOpacity>
       </View>
     </View>
@@ -74,7 +89,7 @@ export default function FamilyPage() {
     <SafeAreaView style={styles.safeArea}>
       <RNStatusBar
         barStyle="dark-content"
-        backgroundColor="#e6f2e6"
+        backgroundColor="#EAF3E9"
         translucent={false}
       />
 
@@ -84,33 +99,35 @@ export default function FamilyPage() {
           onPress={() => router.back()}
           style={styles.headerIcon}
         >
-          <Ionicons name="chevron-back" size={28} color="black" />
+          <Ionicons name="chevron-back" size={26} color="#04302B" />
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>Add Family Members</Text>
 
-        <TouchableOpacity style={styles.headerIcon}>
-          <Ionicons name="notifications-outline" size={28} color="black" />
-        </TouchableOpacity>
+        {/* Empty view to balance back button */}
+        <View style={styles.headerIcon} />
       </View>
 
       {/* Inputs */}
       <View style={styles.inputSection}>
-        <TextInput
+        <AppTextInput
           placeholder="Phone Number"
+          placeholderTextColor="#406B63"
           value={phone}
           onChangeText={setPhone}
           style={styles.input}
           keyboardType="phone-pad"
         />
-        <TextInput
+        <AppTextInput
           placeholder="Relation"
+          placeholderTextColor="#406B63"
           value={relation}
           onChangeText={setRelation}
           style={styles.input}
         />
-        <TextInput
+        <AppTextInput
           placeholder="Name"
+          placeholderTextColor="#406B63"
           value={name}
           onChangeText={setName}
           style={styles.input}
@@ -136,7 +153,7 @@ export default function FamilyPage() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#e6f2e6",
+    backgroundColor: "#EAF3E9",
     paddingTop: Platform.OS === "android" ? RNStatusBar.currentHeight : 0,
     paddingHorizontal: 20,
   },
@@ -144,13 +161,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginVertical: 15,
+    marginVertical: 0,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 22,
+    fontFamily: "ArimaMadurai_700Bold",
+    color: "#04302B",
     textAlign: "center",
     flex: 1,
+    padding: 15,
   },
   headerIcon: {
     width: 40,
@@ -161,25 +180,27 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   input: {
-    backgroundColor: "#d6e9d6",
-    borderRadius: 10,
+    backgroundColor: "#CFE2D3",
+    borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 15,
     marginVertical: 6,
     fontSize: 16,
-    elevation: 1,
+    color: "#04302B",
+    fontFamily: "ArimaMadurai_400Regular",
+
   },
   connectBtn: {
-    backgroundColor: "#04302b",
-    paddingVertical: 12,
-    borderRadius: 10,
+    backgroundColor: "#04302B",
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: "center",
     marginTop: 10,
   },
   connectBtnText: {
     color: "white",
-    fontWeight: "600",
     fontSize: 16,
+    fontFamily: "ArimaMadurai_700Bold",
   },
   familyList: {
     flex: 1,
@@ -188,24 +209,27 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   memberCard: {
-    backgroundColor: "#00584a",
-    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
     padding: 15,
     marginVertical: 6,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#CFE2D3",
   },
   memberDetails: {
     flex: 1,
   },
   memberName: {
-    color: "white",
-    fontWeight: "600",
+    color: "#04302B",
+    fontFamily: "ArimaMadurai_700Bold",
     fontSize: 16,
   },
   memberRelation: {
-    color: "lightgray",
+    color: "#406B63",
+    fontFamily: "ArimaMadurai_400Regular",
     fontSize: 14,
   },
   memberActions: {

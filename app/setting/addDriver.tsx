@@ -3,22 +3,35 @@ import {
   View,
   Text,
   TextInput,
+  TextInputProps,
   TouchableOpacity,
   FlatList,
   StyleSheet,
   SafeAreaView,
-  Dimensions,
+  Platform,
+  StatusBar as RNStatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";  
-
-const { width } = Dimensions.get("window");
+import { router } from "expo-router";
+import {
+  useFonts,
+  ArimaMadurai_400Regular,
+  ArimaMadurai_700Bold,
+} from "@expo-google-fonts/arima-madurai";
 
 type Driver = {
   id: string;
   name: string;
   phone: string;
 };
+
+// Custom TextInput with ArimaMadurai font
+const AppTextInput: React.FC<TextInputProps> = (props) => (
+  <TextInput
+    {...props}
+    style={[{ fontFamily: "ArimaMadurai_400Regular" }, props.style]}
+  />
+);
 
 export default function AddDriversScreen() {
   const [phone, setPhone] = useState("");
@@ -27,6 +40,13 @@ export default function AddDriversScreen() {
     { id: "1", name: "Raja", phone: "Jaffna" },
     { id: "2", name: "Abi", phone: "Chunnagam" },
   ]);
+
+  const [fontsLoaded] = useFonts({
+    ArimaMadurai_400Regular,
+    ArimaMadurai_700Bold,
+  });
+
+  if (!fontsLoaded) return null;
 
   const addDriver = () => {
     if (phone && name) {
@@ -52,42 +72,48 @@ export default function AddDriversScreen() {
         <Text style={styles.driverPhone}>{item.phone}</Text>
       </View>
       <View style={styles.driverActions}>
-        <TouchableOpacity style={styles.iconBtn} >
-          <Ionicons name="create-outline" size={20} color="white" />
+        <TouchableOpacity style={styles.iconCircle}>
+          <Ionicons name="create-outline" size={20} color="04302B" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => deleteDriver(item.id)}>
-          <Ionicons name="trash-outline" size={20} color="white" />
+        <TouchableOpacity
+          style={styles.iconCircle}
+          onPress={() => deleteDriver(item.id)}
+        >
+          <Ionicons name="trash-outline" size={20} color="B00020" />
         </TouchableOpacity>
       </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Back & Notification */}
+    <SafeAreaView
+      style={[styles.container, { paddingTop: Platform.OS === "android" ? RNStatusBar.currentHeight : 0 }]}
+    >
+      {/* Top Bar */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
+          <Ionicons name="chevron-back" size={26} color="#04302B" />
         </TouchableOpacity>
-        <TouchableOpacity>
-          <Ionicons name="notifications-outline" size={24} color="#000" />
-        </TouchableOpacity>
-      </View>
 
-      {/* Title */}
-      <Text style={styles.title}>Add Drivers</Text>
+        <Text style={styles.title}>Add Drivers</Text>
+
+        {/* Empty view to balance back button */}
+        <View style={styles.headerIcon} />
+      </View>
 
       {/* Inputs */}
       <View style={styles.inputSection}>
-        <TextInput
-          placeholder="Driver Phone Number"
+        <AppTextInput
+          placeholder="Enter Driver Phone Number"
+          placeholderTextColor="#406B63"
           value={phone}
           onChangeText={setPhone}
           style={styles.input}
           keyboardType="phone-pad"
         />
-        <TextInput
-          placeholder="Name"
+        <AppTextInput
+          placeholder="Enter Driver Name"
+          placeholderTextColor="#406B63"
           value={name}
           onChangeText={setName}
           style={styles.input}
@@ -103,11 +129,8 @@ export default function AddDriversScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         style={styles.list}
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
       />
-
-      {/* Bottom Navigation */}
-     
     </SafeAreaView>
   );
 }
@@ -115,85 +138,82 @@ export default function AddDriversScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#d7edda",
+    backgroundColor: "#EAF3E9",
     paddingHorizontal: 20,
-    paddingTop: 20,
   },
   topBar: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 15,
+    marginVertical: 15,
+  },
+  headerIcon: {
+    width: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
   title: {
     fontSize: 22,
-    fontWeight: "700",
-    marginBottom: 20,
+    fontFamily: "ArimaMadurai_700Bold",
+    color: "#04302B",
+    textAlign: "center",
+    flex: 1,
   },
   inputSection: {
     marginBottom: 20,
   },
   input: {
-    backgroundColor: "#c6e1c6",
+    backgroundColor: "#CFE2D3",
+    borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 15,
-    borderRadius: 12,
-    marginVertical: 8,
-    fontSize: 16,
+    marginVertical: 6,
+    fontSize: 14,
+    color: "#04302B",
+    fontFamily: "ArimaMadurai_400Regular",
   },
   connectBtn: {
-    backgroundColor: "#04302b",
-    paddingVertical: 12,
+    backgroundColor: "#04302B",
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
     marginTop: 10,
   },
   connectBtnText: {
-    color: "#fff",
-    fontWeight: "600",
+    color: "white",
+    fontFamily: "ArimaMadurai_700Bold",
     fontSize: 16,
   },
   list: {
     flex: 1,
   },
   driverCard: {
-    backgroundColor: "#04302b",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 15,
+    marginVertical: 6,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 15,
-    borderRadius: 12,
-    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: "#CFE2D3",
   },
   driverName: {
-    color: "#fff",
+    color: "#04302B",
+    fontFamily: "ArimaMadurai_700Bold",
     fontSize: 16,
-    fontWeight: "600",
   },
   driverPhone: {
-    color: "#c6e1c6",
+    color: "#406B63",
+    fontFamily: "ArimaMadurai_400Regular",
     fontSize: 14,
   },
   driverActions: {
     flexDirection: "row",
-  },
-  iconBtn: {
-    marginLeft: 10,
-  },
-  bottomNav: {
-    flexDirection: "row",
-    justifyContent: "space-around",
     alignItems: "center",
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
   },
-  activeButton: {
-    backgroundColor: "#04302b",
-    padding: 12,
-    borderRadius: 50,
+  iconCircle: {
+ 
+    marginLeft: 10,
   },
 });

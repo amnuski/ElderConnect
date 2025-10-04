@@ -47,6 +47,18 @@ export default function RootLayout() {
 
        {/* Driver Screens */}
         <Stack.Screen name="Driver/dashboard" />
+
+
+         {/* Setting Screens */}
+        <Stack.Screen name="setting/setting" />
+        <Stack.Screen name="setting/addDriver" />
+        <Stack.Screen name="setting/addFamily" />
+        <Stack.Screen name="setting/emgencyAdd" />
+        <Stack.Screen name="setting/profile" />
+        <Stack.Screen name="setting/setLanguage" />
+
+
+
         
       </Stack>
 

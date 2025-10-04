@@ -51,10 +51,10 @@ export default function Footer({ activeTab = "home", onTabPress }: FooterProps) 
         router.push("/Family/add_schedule");
         break;
       case "profile":
-        router.push("/Welcoming_screen/profile-info");
+        router.push("/setting/setting");
         break;
       case "emergency":
-        router.push("../emergency");
+        router.push("/setting/emergencyAdd");
         break;
     }
   };
