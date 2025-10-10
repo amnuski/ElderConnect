@@ -1,4 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons"; // ✅ For icons
+import { router } from "expo-router"; // ✅ For navigation
 import React, { useState } from "react";
 import {
   Alert,
@@ -35,8 +36,14 @@ export default function DriverResponseScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* ✅ Header with Back Button */}
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={26} color="#0a3d2e" />
+        </TouchableOpacity>
+
+        <Text style={styles.headerTitle}>Driver Response</Text>
+
         <Image
           source={{ uri: "https://via.placeholder.com/50" }} // replace with driver photo
           style={styles.profileImage}
@@ -76,13 +83,6 @@ export default function DriverResponseScreen() {
           ))
         )}
       </ScrollView>
-
-      {/* Bottom Nav */}
-      <View style={styles.bottomNav}>
-        <Ionicons name="home" size={28} color="black" />
-        <Ionicons name="car" size={28} color="black" />
-        <Ionicons name="person" size={28} color="black" />
-      </View>
     </View>
   );
 }
@@ -91,14 +91,24 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f0f8f0" },
   header: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     alignItems: "center",
-    padding: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
     backgroundColor: "#e6ffe6",
     borderBottomLeftRadius: 15,
     borderBottomRightRadius: 15,
   },
-  profileImage: { width: 50, height: 50, borderRadius: 25 },
+  backBtn: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0a3d2e",
+  },
+  profileImage: { width: 40, height: 40, borderRadius: 20 },
   rideList: { flex: 1, padding: 10 },
   rideCard: {
     backgroundColor: "#d9f2d9",
@@ -126,13 +136,4 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "white", fontWeight: "bold" },
   noRides: { textAlign: "center", marginTop: 50, fontSize: 16, color: "#666" },
-  bottomNav: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    paddingVertical: 12,
-    backgroundColor: "white",
-    borderTopWidth: 1,
-    borderTopColor: "#ddd",
-  },
 });
