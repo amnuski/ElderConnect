@@ -44,6 +44,8 @@ export default function RootLayout() {
         <Stack.Screen name="Family/schedule_page" />
         <Stack.Screen name="Family/dash" />
         <Stack.Screen name="Family/add_schedule" />
+        <Stack.Screen name="map/Location_screen" />
+
 
        {/* Driver Screens */}
         <Stack.Screen name="Driver/dashboard" />

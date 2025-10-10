@@ -48,12 +48,12 @@ export default function Footer({ activeTab = "home", onTabPress }: FooterProps) 
         router.push("/Family/schedule_page");
         break;
       case "rides":
-        router.push("/Family/add_schedule");
+        router.push("/map/Location_screen");
         break;
       case "profile":
         router.push("/setting/setting");
         break;
-      case "emergency":
+      case "emergency": 
         router.push("/setting/emergencyAdd");
         break;
     }
@@ -170,7 +170,7 @@ export default function Footer({ activeTab = "home", onTabPress }: FooterProps) 
 const styles = StyleSheet.create({
   footerContainer: {
     backgroundColor: "transparent",
-    height: screenHeight * 0.085,
+   
   },
   bottomNavigation: {
     marginHorizontal: 0,

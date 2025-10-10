@@ -20,6 +20,10 @@ import {
 } from "react-native";
 
 const { width } = Dimensions.get("window");
+// Width used for snapping between cards: card width (0.56w) + horizontal margins (0.1w)
+const ITEM_WIDTH = width * 0.66;
+// Padding to center the first and last items when snapping to center
+const H_PADDING = Math.max(0, (width - ITEM_WIDTH) / 2);
 
 export default function RoleSelectionScreen() {
   const router = useRouter();
@@ -86,8 +90,8 @@ export default function RoleSelectionScreen() {
 
     setSelectedRole(roleKey);
 
-    scrollRef.current?.scrollTo({
-      x: index * (width * 0.8),
+  scrollRef.current?.scrollTo({
+      x: index * ITEM_WIDTH,
       animated: true,
     });
 
@@ -132,9 +136,13 @@ export default function RoleSelectionScreen() {
       <ScrollView
         ref={scrollRef}
         horizontal
-        pagingEnabled
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingHorizontal: H_PADDING }]}
+        decelerationRate="fast"
+        snapToInterval={ITEM_WIDTH}
+        snapToAlignment="center"
+        disableIntervalMomentum
+        snapToOffsets={roles.map((_, i) => i * ITEM_WIDTH)}
       >
         {roles.map((role, index) => {
           const isSelected = selectedRole === role.key;
