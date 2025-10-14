@@ -1,4 +1,4 @@
-// pages/Family/dash.tsx
+// app/Family/dash.tsx
 import { ArimaMadurai_400Regular, ArimaMadurai_700Bold, useFonts } from "@expo-google-fonts/arima-madurai";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -15,10 +15,12 @@ import {
   View,
 } from "react-native";
 import Footer from "../Footer/footer";
+import { useRouter } from "expo-router";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 export default function Dashboard() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("home");
   const [selectedActivity, setSelectedActivity] = useState<number | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -27,9 +29,7 @@ export default function Dashboard() {
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
-  if (!fontsLoaded) {
-    return null;
-  }
+  if (!fontsLoaded) return null;
 
   const activities = [
     { id: 1, title: "Go to Temple", time: "8.00 AM" },
@@ -38,12 +38,13 @@ export default function Dashboard() {
     { id: 4, title: "Family Visit", time: "6.00 PM" },
   ];
 
-  const quickActions = [{ icon: "call" }, { icon: "person" }, { icon: "car" }];
+  const quickActions = [
+    { icon: "call", route: "/Call/DriverCall" },
+    { icon: "person", route: "/Call/CareTakerCall" },
+    { icon: "car", route: "/Call/FamilyCall" },
+  ];
 
-  const handleTabPress = (tab: string) => {
-    setActiveTab(tab);
-    console.log("Navigating to:", tab);
-  };
+  const handleTabPress = (tab: string) => setActiveTab(tab);
 
   const handleActivityPress = (activityId: number) => {
     setSelectedActivity(selectedActivity === activityId ? null : activityId);
@@ -59,10 +60,9 @@ export default function Dashboard() {
     setSelectedActivity(null);
   };
 
-  // 👇 Scroll handler for indicator update
   const handleScroll = (event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
-    const cardWidth = screenWidth * 0.5 + screenWidth * 0.04; // card width + marginRight
+    const cardWidth = screenWidth * 0.5 + screenWidth * 0.04;
     const index = Math.round(offsetX / cardWidth);
     setActiveIndex(index);
   };
@@ -77,7 +77,7 @@ export default function Dashboard() {
       >
         <StatusBar barStyle="dark-content" backgroundColor="#ffffffff" />
 
-        {/* Header Section */}
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.profileSection}>
             <Image
@@ -101,7 +101,7 @@ export default function Dashboard() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.contentContainer}
         >
-          {/* Today Activity Section */}
+          {/* Today Activity */}
           <View style={styles.activitySection}>
             <Text style={styles.sectionTitle1}>Today Activity</Text>
             <Text style={styles.dateText}>July 12, 2025</Text>
@@ -118,8 +118,7 @@ export default function Dashboard() {
                   key={activity.id}
                   style={[
                     styles.activityCard,
-                    selectedActivity === activity.id &&
-                      styles.selectedActivityCard,
+                    selectedActivity === activity.id && styles.selectedActivityCard,
                   ]}
                   onPress={() => handleActivityPress(activity.id)}
                   activeOpacity={0.8}
@@ -162,21 +161,25 @@ export default function Dashboard() {
             </View>
           </View>
 
-          {/* Track Ride Button */}
+          {/* Track Ride */}
           <TouchableOpacity style={styles.trackRideButton}>
             <Text style={styles.trackRideText}>Track Ride</Text>
           </TouchableOpacity>
 
-          {/* Quick Action Buttons */}
+          {/* Quick Actions */}
           <View style={styles.quickActionsContainer}>
             {quickActions.map((action, index) => (
-              <TouchableOpacity key={index} style={styles.quickActionButton}>
+              <TouchableOpacity
+                key={index}
+                style={styles.quickActionButton}
+                onPress={() => router.push(action.route as any)}
+              >
                 <Ionicons name={action.icon as any} size={26} color="#04302B" />
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* ✅ Additional Content */}
+          {/* Additional Content */}
           <View style={styles.additionalContent}>
             <Text style={styles.additionalTitle}>Additional Information</Text>
             <Text style={styles.additionalText}>
@@ -187,7 +190,7 @@ export default function Dashboard() {
           </View>
         </ScrollView>
 
-        {/* Footer Navigation */}
+        {/* Footer */}
         <Footer activeTab={activeTab} onTabPress={handleTabPress} />
       </LinearGradient>
     </SafeAreaView>
@@ -195,9 +198,7 @@ export default function Dashboard() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -206,11 +207,7 @@ const styles = StyleSheet.create({
     paddingVertical: screenHeight * 0.02,
     paddingTop: screenHeight * 0.06,
   },
-  profileSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
+  profileSection: { flexDirection: "row", alignItems: "center", flex: 1 },
   profileImage: {
     width: screenWidth * 0.15,
     height: screenWidth * 0.15,
@@ -218,16 +215,8 @@ const styles = StyleSheet.create({
     marginRight: screenWidth * 0.04,
     backgroundColor: "#4CAF50",
   },
-  welcomeText: {
-    fontFamily: "ArimaMadurai_400Regular",
-    fontSize: screenWidth * 0.045,
-    color: "#000000",
-  },
-  userName: {
-    fontFamily: "ArimaMadurai_700Bold",
-    fontSize: screenWidth * 0.06,
-    color: "#000000",
-  },
+  welcomeText: { fontFamily: "ArimaMadurai_400Regular", fontSize: screenWidth * 0.045, color: "#000" },
+  userName: { fontFamily: "ArimaMadurai_700Bold", fontSize: screenWidth * 0.06, color: "#000" },
   notificationButton: {
     width: screenWidth * 0.12,
     height: screenWidth * 0.12,
@@ -236,31 +225,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingHorizontal: screenWidth * 0.05,
-    paddingBottom: screenHeight * 0.15,
-  },
-  activitySection: {
-    marginBottom: screenHeight * 0.03,
-  },
-  sectionTitle1: {
-    fontFamily: "ArimaMadurai_700Bold",
-    fontSize: screenWidth * 0.055,
-    color: "#000000",
-    marginBottom: screenHeight * 0.005,
-  },
-  dateText: {
-    fontFamily: "ArimaMadurai_400Regular",
-    fontSize: screenWidth * 0.04,
-    color: "#666",
-    marginBottom: screenHeight * 0.025,
-  },
-  activityCardsContainer: {
-    marginBottom: screenHeight * 0.02,
-  },
+  content: { flex: 1 },
+  contentContainer: { paddingHorizontal: screenWidth * 0.05, paddingBottom: screenHeight * 0.15 },
+  activitySection: { marginBottom: screenHeight * 0.03 },
+  sectionTitle1: { fontFamily: "ArimaMadurai_700Bold", fontSize: screenWidth * 0.055, color: "#000", marginBottom: screenHeight * 0.005 },
+  dateText: { fontFamily: "ArimaMadurai_400Regular", fontSize: screenWidth * 0.04, color: "#666", marginBottom: screenHeight * 0.025 },
+  activityCardsContainer: { marginBottom: screenHeight * 0.02 },
   activityCard: {
     backgroundColor: "#C8E6C9",
     borderRadius: screenWidth * 0.03,
@@ -275,25 +245,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  selectedActivityCard: {
-    borderColor: "#2E7D32",
-    borderWidth: 2,
-    backgroundColor: "#F0F8F0",
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontFamily: "ArimaMadurai_700Bold",
-    fontSize: screenWidth * 0.045,
-    color: "#04302B",
-    marginBottom: screenHeight * 0.01,
-  },
-  activityTime: {
-    fontFamily: "ArimaMadurai_400Regular",
-    fontSize: screenWidth * 0.04,
-    color: "#000000",
-  },
+  selectedActivityCard: { borderColor: "#2E7D32", borderWidth: 2, backgroundColor: "#F0F8F0" },
+  activityContent: { flex: 1 },
+  activityTitle: { fontFamily: "ArimaMadurai_700Bold", fontSize: screenWidth * 0.045, color: "#04302B", marginBottom: screenHeight * 0.01 },
+  activityTime: { fontFamily: "ArimaMadurai_400Regular", fontSize: screenWidth * 0.04, color: "#000" },
   editActions: {
     position: "absolute",
     right: 0,
@@ -307,44 +262,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: screenHeight * 0.01,
   },
-  editButton: {
-    padding: screenWidth * 0.02,
-  },
-  deleteButton: {
-    padding: screenWidth * 0.02,
-  },
-  scrollIndicators: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: screenWidth * 0.015,
-    marginTop: screenHeight * 0.01,
-  },
-  indicator: {
-    width: screenWidth * 0.05,
-    height: screenHeight * 0.005,
-    backgroundColor: "#E8F5E8",
-    borderRadius: screenHeight * 0.0025,
-  },
-  activeIndicator: {
-    backgroundColor: "#2E7D32",
-  },
-  trackRideButton: {
-    backgroundColor: "#04302B",
-    borderRadius: screenWidth * 0.03,
-    paddingVertical: screenHeight * 0.02,
-    alignItems: "center",
-    marginBottom: screenHeight * 0.04,
-  },
-  trackRideText: {
-    fontFamily: "ArimaMadurai_700Bold",
-    color: "#FFFFFF",
-    fontSize: screenWidth * 0.045,
-  },
-  quickActionsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: screenHeight * 0.05,
-  },
+  editButton: { padding: screenWidth * 0.02 },
+  deleteButton: { padding: screenWidth * 0.02 },
+  scrollIndicators: { flexDirection: "row", justifyContent: "center", gap: screenWidth * 0.015, marginTop: screenHeight * 0.01 },
+  indicator: { width: screenWidth * 0.05, height: screenHeight * 0.005, backgroundColor: "#E8F5E8", borderRadius: screenHeight * 0.0025 },
+  activeIndicator: { backgroundColor: "#2E7D32" },
+  trackRideButton: { backgroundColor: "#04302B", borderRadius: screenWidth * 0.03, paddingVertical: screenHeight * 0.02, alignItems: "center", marginBottom: screenHeight * 0.04 },
+  trackRideText: { fontFamily: "ArimaMadurai_700Bold", color: "#fff", fontSize: screenWidth * 0.045 },
+  quickActionsContainer: { flexDirection: "row", justifyContent: "space-around", marginBottom: screenHeight * 0.05 },
   quickActionButton: {
     backgroundColor: "#C8E6C9",
     borderRadius: screenWidth * 0.03,
@@ -359,21 +284,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  additionalContent: {
-    marginTop: screenHeight * 0.01,
-    padding: screenWidth * 0.05,
-    backgroundColor: "#E8F5E8",
-    borderRadius: screenWidth * 0.03,
-  },
-  additionalTitle: {
-    fontFamily: "ArimaMadurai_700Bold",
-    fontSize: screenWidth * 0.05,
-    color: "#04302B",
-    marginBottom: screenHeight * 0.01,
-  },
-  additionalText: {
-    fontFamily: "ArimaMadurai_400Regular",
-    fontSize: screenWidth * 0.04,
-    color: "#333",
-  },
+  additionalContent: { marginTop: screenHeight * 0.01, padding: screenWidth * 0.05, backgroundColor: "#E8F5E8", borderRadius: screenWidth * 0.03 },
+  additionalTitle: { fontFamily: "ArimaMadurai_700Bold", fontSize: screenWidth * 0.05, color: "#04302B", marginBottom: screenHeight * 0.01 },
+  additionalText: { fontFamily: "ArimaMadurai_400Regular", fontSize: screenWidth * 0.04, color: "#333" },
 });

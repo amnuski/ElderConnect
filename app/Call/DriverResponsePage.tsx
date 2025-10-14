@@ -1,5 +1,5 @@
-import { Ionicons } from "@expo/vector-icons"; // ✅ For icons
-import { router } from "expo-router"; // ✅ For navigation
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
@@ -11,15 +11,23 @@ import {
   View,
 } from "react-native";
 
+// ✅ Ride type
+interface Ride {
+  id: number;
+  pickup: string;
+  drop: string;
+  time: string;
+  status: "Pending" | "Accepted";
+}
+
 export default function DriverResponseScreen() {
-  // Ride requests state
-  const [rides, setRides] = useState([
+  const [rides, setRides] = useState<Ride[]>([
     { id: 1, pickup: "Station Road", drop: "University", time: "10:30 AM", status: "Pending" },
     { id: 2, pickup: "Market", drop: "Hospital", time: "11:00 AM", status: "Pending" },
   ]);
 
-  // Handle Accept
-  const handleAccept = (id) => {
+  // ✅ Typed id parameter
+  const handleAccept = (id: number) => {
     setRides((prevRides) =>
       prevRides.map((ride) =>
         ride.id === id ? { ...ride, status: "Accepted" } : ride
@@ -28,15 +36,13 @@ export default function DriverResponseScreen() {
     Alert.alert("Ride Accepted ✅", "You have accepted the ride.");
   };
 
-  // Handle Decline
-  const handleDecline = (id) => {
+  const handleDecline = (id: number) => {
     setRides((prevRides) => prevRides.filter((ride) => ride.id !== id));
     Alert.alert("Ride Declined ❌", "You have declined the ride.");
   };
 
   return (
     <View style={styles.container}>
-      {/* ✅ Header with Back Button */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={26} color="#0a3d2e" />
@@ -45,12 +51,11 @@ export default function DriverResponseScreen() {
         <Text style={styles.headerTitle}>Driver Response</Text>
 
         <Image
-          source={{ uri: "https://via.placeholder.com/50" }} // replace with driver photo
+          source={{ uri: "https://via.placeholder.com/50" }}
           style={styles.profileImage}
         />
       </View>
 
-      {/* Ride List */}
       <ScrollView style={styles.rideList}>
         {rides.length === 0 ? (
           <Text style={styles.noRides}>No ride requests available</Text>
@@ -99,15 +104,8 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 15,
     borderBottomRightRadius: 15,
   },
-  backBtn: {
-    padding: 6,
-    borderRadius: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#0a3d2e",
-  },
+  backBtn: { padding: 6, borderRadius: 8 },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: "#0a3d2e" },
   profileImage: { width: 40, height: 40, borderRadius: 20 },
   rideList: { flex: 1, padding: 10 },
   rideCard: {
