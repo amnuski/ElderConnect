@@ -6,18 +6,29 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
-import  scheduleEventEmitter  from "./scheduleEventEmitter"; // ✅ Correct import
+import scheduleEventEmitter from "./scheduleEventEmitter";
+import {
+  ArimaMadurai_400Regular,
+  ArimaMadurai_700Bold,
+  useFonts,
+} from "@expo-google-fonts/arima-madurai";
 
 const THEME_COLOR = "#04302B";
 
 const AddSchedule = () => {
   const router = useRouter();
   const { selectedDate } = useLocalSearchParams();
+
+  const [fontsLoaded] = useFonts({
+    ArimaMadurai_400Regular,
+    ArimaMadurai_700Bold,
+  });
 
   const [title, setTitle] = useState("");
   const [time, setTime] = useState("");
@@ -30,6 +41,14 @@ const AddSchedule = () => {
   );
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color={THEME_COLOR} />
+      </View>
+    );
+  }
 
   // ✅ Get current location
   const getCurrentLocation = async () => {
@@ -85,7 +104,7 @@ const AddSchedule = () => {
         <Text style={styles.header}>Add Event</Text>
       </View>
 
-      {/* 📅 Date Picker Box */}
+      {/* 📅 Date Picker */}
       <TouchableOpacity
         onPress={() => setShowDatePicker(true)}
         style={styles.inputBox}
@@ -105,7 +124,7 @@ const AddSchedule = () => {
         />
       )}
 
-      {/* 🕒 Time Picker Box */}
+      {/* 🕒 Time Picker */}
       <TouchableOpacity
         onPress={() => setShowTimePicker(true)}
         style={styles.inputBox}
@@ -132,6 +151,7 @@ const AddSchedule = () => {
         value={title}
         onChangeText={setTitle}
         style={styles.input}
+        placeholderTextColor="#7b7b7b"
       />
 
       <View style={styles.row}>
@@ -140,6 +160,7 @@ const AddSchedule = () => {
           value={fromLocation}
           onChangeText={setFromLocation}
           style={[styles.input, { flex: 1 }]}
+          placeholderTextColor="#7b7b7b"
         />
         <TouchableOpacity onPress={getCurrentLocation}>
           <Ionicons name="locate" size={28} color={THEME_COLOR} />
@@ -151,6 +172,7 @@ const AddSchedule = () => {
         value={toLocation}
         onChangeText={setToLocation}
         style={styles.input}
+        placeholderTextColor="#7b7b7b"
       />
 
       <TextInput
@@ -158,6 +180,7 @@ const AddSchedule = () => {
         value={driver}
         onChangeText={setDriver}
         style={styles.input}
+        placeholderTextColor="#7b7b7b"
       />
 
       <TouchableOpacity style={styles.addButton} onPress={handleAdd}>
@@ -174,7 +197,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#E9F6EC",
     padding: 40,
-    marginTop:20,
+    marginTop: 0,
   },
   topBar: {
     flexDirection: "row",
@@ -183,9 +206,9 @@ const styles = StyleSheet.create({
   },
   header: {
     fontSize: 26,
-    fontWeight: "bold",
     color: THEME_COLOR,
     marginLeft: 10,
+    fontFamily: "ArimaMadurai_700Bold",
   },
   input: {
     backgroundColor: "white",
@@ -194,6 +217,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontSize: 16,
     color: THEME_COLOR,
+    fontFamily: "ArimaMadurai_400Regular",
   },
   inputBox: {
     backgroundColor: "white",
@@ -204,6 +228,7 @@ const styles = StyleSheet.create({
   inputText: {
     fontSize: 16,
     color: THEME_COLOR,
+    fontFamily: "ArimaMadurai_400Regular",
   },
   addButton: {
     backgroundColor: THEME_COLOR,
@@ -215,7 +240,7 @@ const styles = StyleSheet.create({
   addText: {
     color: "white",
     fontSize: 18,
-    fontWeight: "bold",
+    fontFamily: "ArimaMadurai_700Bold",
   },
   row: {
     flexDirection: "row",
@@ -223,3 +248,4 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
 });
+ 

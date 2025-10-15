@@ -1,6 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
   Alert,
@@ -15,8 +12,17 @@ import {
   TextInput,
   View,
   ListRenderItem,
+  ActivityIndicator,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Swipeable } from "react-native-gesture-handler";
+import { router } from "expo-router";
+import {
+  useFonts,
+  ArimaMadurai_400Regular,
+  ArimaMadurai_700Bold,
+} from "@expo-google-fonts/arima-madurai";
 
 // ✅ Contact type
 interface Contact {
@@ -44,6 +50,22 @@ export default function DriverCall() {
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
 
+  // ✅ Load custom fonts
+  const [fontsLoaded] = useFonts({
+    ArimaMadurai_400Regular,
+    ArimaMadurai_700Bold,
+  });
+
+  // Show loading while fonts are loading
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0a3d2e" />
+      </View>
+    );
+  }
+
+  // ✅ Animated icon for nice press effect
   const AnimatedIcon: React.FC<AnimatedIconProps> = ({
     name,
     size = 24,
@@ -69,6 +91,7 @@ export default function DriverCall() {
     );
   };
 
+  // ✅ Add new contact
   const openAddModal = () => {
     setEditingContact(null);
     setNameInput("");
@@ -76,6 +99,7 @@ export default function DriverCall() {
     setModalVisible(true);
   };
 
+  // ✅ Edit contact
   const openEditModal = (contact: Contact) => {
     setEditingContact(contact);
     setNameInput(contact.name);
@@ -83,6 +107,7 @@ export default function DriverCall() {
     setModalVisible(true);
   };
 
+  // ✅ Save or update contact
   const saveContact = () => {
     if (!nameInput.trim() || !phoneInput.trim()) {
       Alert.alert("Validation", "Please enter name and phone number.");
@@ -110,6 +135,7 @@ export default function DriverCall() {
     setModalVisible(false);
   };
 
+  // ✅ Delete contact
   const deleteContact = (contact: Contact) => {
     Alert.alert(
       "Delete contact",
@@ -142,13 +168,17 @@ export default function DriverCall() {
     </View>
   );
 
-  // ✅ Typing renderItem
+  // ✅ Render each contact
   const renderContact: ListRenderItem<Contact> = ({ item }) => (
     <Swipeable renderRightActions={() => renderRightActions(item)}>
       <View style={styles.contactCard}>
         <View>
-          <Text style={styles.callerName}>{item.name}</Text>
-          <Text style={styles.callerPhone}>{item.phone}</Text>
+          <Text style={[styles.callerName, { fontFamily: "ArimaMadurai_700Bold" }]}>
+            {item.name}
+          </Text>
+          <Text style={[styles.callerPhone, { fontFamily: "ArimaMadurai_400Regular" }]}>
+            {item.phone}
+          </Text>
         </View>
         <View style={styles.callActions}>
           <AnimatedIcon
@@ -174,16 +204,21 @@ export default function DriverCall() {
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <LinearGradient colors={["#F6FBF7", "#CFE4CF"]} style={styles.container}>
+        {/* Header */}
         <View style={styles.header}>
-          <View style={{ flexDirection: "row", alignItems: "center", }}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Ionicons
               name="chevron-back"
               size={22}
               color="#0a3d2e"
               onPress={() => router.back()}
-               style={{ marginTop:-10 }}
+              style={{ marginTop: -10 }}
             />
-            <Text style={styles.headerText}>Driver Call</Text>
+            <Text
+              style={[styles.headerText, { fontFamily: "ArimaMadurai_700Bold" }]}
+            >
+              Driver Call
+            </Text>
           </View>
 
           <AnimatedIcon
@@ -194,6 +229,7 @@ export default function DriverCall() {
           />
         </View>
 
+        {/* Contact List */}
         <FlatList
           data={contacts}
           keyExtractor={(item) => item.id.toString()}
@@ -202,17 +238,25 @@ export default function DriverCall() {
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListEmptyComponent={
             <View style={{ marginTop: 40, alignItems: "center" }}>
-              <Text style={{ color: "#0a3d2e", opacity: 0.7 }}>
+              <Text
+                style={{
+                  color: "#0a3d2e",
+                  opacity: 0.7,
+                  fontFamily: "ArimaMadurai_400Regular",
+                }}
+              >
                 No contacts — tap + to add
               </Text>
             </View>
           }
         />
 
+        {/* Floating Add Button */}
         <Pressable style={styles.floatingBtn} onPress={openAddModal}>
           <Ionicons name="add" size={30} color="white" />
         </Pressable>
 
+        {/* Add/Edit Modal */}
         <Modal
           visible={modalVisible}
           transparent
@@ -221,7 +265,12 @@ export default function DriverCall() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>
+              <Text
+                style={[
+                  styles.modalTitle,
+                  { fontFamily: "ArimaMadurai_700Bold" },
+                ]}
+              >
                 {editingContact ? "Edit Contact" : "Add Contact"}
               </Text>
 
@@ -229,30 +278,54 @@ export default function DriverCall() {
                 placeholder="Name"
                 value={nameInput}
                 onChangeText={setNameInput}
-                style={styles.input}
+                style={[
+                  styles.input,
+                  { fontFamily: "ArimaMadurai_400Regular" },
+                ]}
                 placeholderTextColor="#7b7b7b"
               />
               <TextInput
                 placeholder="Phone Number"
                 value={phoneInput}
                 onChangeText={setPhoneInput}
-                style={[styles.input, { marginTop: 10 }]}
+                style={[
+                  styles.input,
+                  { marginTop: 10, fontFamily: "ArimaMadurai_400Regular" },
+                ]}
                 keyboardType="phone-pad"
                 placeholderTextColor="#7b7b7b"
               />
 
-              <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 18 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "flex-end",
+                  marginTop: 18,
+                }}
+              >
                 <Pressable
                   onPress={() => setModalVisible(false)}
                   style={[styles.modalBtn, { backgroundColor: "#e6e6e6" }]}
                 >
-                  <Text>Cancel</Text>
+                  <Text style={{ fontFamily: "ArimaMadurai_400Regular" }}>
+                    Cancel
+                  </Text>
                 </Pressable>
                 <Pressable
                   onPress={saveContact}
-                  style={[styles.modalBtn, { marginLeft: 10, backgroundColor: "#0a3d2e" }]}
+                  style={[
+                    styles.modalBtn,
+                    { marginLeft: 10, backgroundColor: "#0a3d2e" },
+                  ]}
                 >
-                  <Text style={{ color: "white" }}>{editingContact ? "Save" : "Add"}</Text>
+                  <Text
+                    style={{
+                      color: "white",
+                      fontFamily: "ArimaMadurai_700Bold",
+                    }}
+                  >
+                    {editingContact ? "Save" : "Add"}
+                  </Text>
                 </Pressable>
               </View>
             </View>
@@ -264,20 +337,92 @@ export default function DriverCall() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 30, marginTop:0, paddingTop: Platform.OS === "android" ? 10 : 20,overflow: "hidden",},
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 ,marginTop:25,},
-  headerText: { fontSize: 22, fontWeight: "700", color: "#0a3d2e", marginLeft: 10 ,marginBottom:10},
-  contactCard: { flexDirection: "row", backgroundColor: "#0a3d2e", paddingVertical: 18, paddingHorizontal: 16, borderRadius: 14, alignItems: "center", justifyContent: "space-between" },
-  callerName: { color: "white", fontSize: 18, fontWeight: "700" },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: {
+    flex: 1,
+    paddingHorizontal: 30,
+    marginTop: 0,
+    paddingTop: Platform.OS === "android" ? 10 : 20,
+    overflow: "hidden",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+    marginTop: 25,
+  },
+  headerText: { fontSize: 22, color: "#0a3d2e", marginLeft: 10, marginBottom: 10 },
+  contactCard: {
+    flexDirection: "row",
+    backgroundColor: "#0a3d2e",
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  callerName: { color: "white", fontSize: 18 },
   callerPhone: { color: "#a3c9b9", fontSize: 13, marginTop: 4 },
   callActions: { flexDirection: "row", alignItems: "center" },
-  rightActionContainer: { flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "#155e4a",  borderBottomRightRadius: 14,borderTopRightRadius:14, paddingVertical: 18, marginLeft: -7, paddingHorizontal: 10, marginBottom: 1 },
-  smallActionBtn: { height: 36, width: 36, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  floatingBtn: { position: "absolute", bottom: 60, right: 24, backgroundColor: "#0a3d2e", borderRadius: 30, padding: 14, elevation: 6, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
-  modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" },
-  modalCard: { backgroundColor: "white", padding: 18, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
-  modalTitle: { fontSize: 18, fontWeight: "700", color: "#0a3d2e", marginBottom: 8 },
-  input: { borderWidth: 1, borderColor: "#e3e3e3", borderRadius: 10, paddingHorizontal: 12, paddingVertical: Platform.OS === "ios" ? 12 : 8, color: "#0a3d2e", fontSize: 15 },
-  modalBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  
+  rightActionContainer: {
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#155e4a",
+    borderBottomRightRadius: 14,
+    borderTopRightRadius: 14,
+    paddingVertical: 18,
+    marginLeft: -7,
+    paddingHorizontal: 10,
+    marginBottom: 1,
+  },
+  smallActionBtn: {
+    height: 36,
+    width: 36,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  floatingBtn: {
+    position: "absolute",
+    bottom: 60,
+    right: 24,
+    backgroundColor: "#0a3d2e",
+    borderRadius: 30,
+    padding: 14,
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  modalCard: {
+    backgroundColor: "white",
+    padding: 18,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  modalTitle: { fontSize: 18, color: "#0a3d2e", marginBottom: 8 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 12 : 8,
+    color: "#0a3d2e",
+    fontSize: 15,
+  },
+  modalBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });
