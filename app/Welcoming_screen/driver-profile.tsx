@@ -69,7 +69,7 @@ export default function DriverProfileScreen() {
       licenseImage,
     });
 
-    router.push("/Driver/dashboard"); // ✅ Change path for driver dashboard
+    router.push("/Driver/Driver-dash"); // ✅ Change path for driver dashboard
   };
 
   return (

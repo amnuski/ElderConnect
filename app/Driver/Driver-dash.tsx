@@ -1,0 +1,116 @@
+// app/Driver/dash.tsx
+import React from "react";
+import { View, Text, TouchableOpacity, Image, StyleSheet, SafeAreaView } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import Footer from "../Footer/DriverFooter";
+import { router } from "expo-router";
+
+import {
+  useFonts,
+  ArimaMadurai_400Regular,
+  ArimaMadurai_700Bold,
+} from "@expo-google-fonts/arima-madurai";
+
+export default function DriverDash() {
+  const [fontsLoaded] = useFonts({
+    ArimaMadurai_400Regular,
+    ArimaMadurai_700Bold,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <LinearGradient colors={["#F6FFF6", "#CDEDC8"]} style={styles.gradient}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.userInfo}>
+            <Image
+              source={{
+                uri: "https://cdn-icons-png.flaticon.com/512/847/847969.png",
+              }}
+              style={styles.profileIcon}
+            />
+            <View>
+              <Text style={styles.welcomeText}>Welcome</Text>
+              <Text style={styles.nameText}>Driver !</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.bellButton}>
+            <Ionicons name="notifications-outline" size={26} color="#003C1F"
+               onPress={() => router.push("/Call/DriverResponsePage") as any}
+             />
+          </TouchableOpacity>
+        </View>
+
+        {/* Body content */}
+        <View style={styles.body}>
+          <Text style={styles.placeholderText}>Your dashboard content here</Text>
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footerContainer}>
+          <Footer />
+        </View>
+      </LinearGradient>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  gradient: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    marginTop: 40,
+  },
+  userInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  profileIcon: {
+    width: 45,
+    height: 45,
+    marginRight: 10,
+    borderRadius: 50,
+  },
+  welcomeText: {
+    fontSize: 16,
+    color: "#333",
+    fontFamily: "ArimaMadurai_400Regular",
+  },
+  nameText: {
+    fontSize: 20,
+    fontFamily: "ArimaMadurai_700Bold",
+    color: "#003C1F",
+  },
+  bellButton: {
+    backgroundColor: "#E8F6E9",
+    padding: 8,
+    borderRadius: 50,
+  },
+  body: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderText: {
+    fontSize: 16,
+    color: "#888",
+    fontFamily: "ArimaMadurai_400Regular",
+  },
+  footerContainer: {
+    width: "100%",
+  },
+});
