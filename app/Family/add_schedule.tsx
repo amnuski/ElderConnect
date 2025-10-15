@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
     color: THEME_COLOR,
     marginLeft: 10,
-    fontFamily: "ArimaMadurai_700Bold",
+    fontFamily: "ArimaMadurai_700Bold"
   },
   input: {
     backgroundColor: "white",

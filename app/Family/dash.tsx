@@ -40,7 +40,7 @@ export default function Dashboard() {
 
   const quickActions = [
     { icon: "call", route: "/Call/DriverCall" },
-    { icon: "person", route: "/Call/CareTakerCall" },
+    //{ icon: "person", route: "/Call/CareTakerCall" },
     { icon: "car", route: "/Call/FamilyCall" },
   ];
 

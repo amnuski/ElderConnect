@@ -33,6 +33,7 @@ export default function RootLayout() {
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
           {/* Root Screens */}
+          <Stack.Screen name="Family/schedule_page" />
           <Stack.Screen name="index" />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="phone-number" />
@@ -43,7 +44,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
           {/* Family Screens */}
-          <Stack.Screen name="Family/schedule_page" />
+          {/* <Stack.Screen name="Family/schedule_page" /> */}
           <Stack.Screen name="Family/dash" />
           <Stack.Screen name="Family/add_schedule" />
           <Stack.Screen name="map/Location_screen" />

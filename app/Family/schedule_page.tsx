@@ -15,48 +15,86 @@ import {
 import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
-  useFonts
+  useFonts,
 } from "@expo-google-fonts/arima-madurai";
-
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import scheduleEventEmitter from "./scheduleEventEmitter";
 
+// ✅ Android specific: Enable LayoutAnimation
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// 🔹 Interface for events
 interface EventItem {
   title: string;
   time: string;
   date: string;
 }
 
-const SchedulePage = () => {
-  const router = useRouter();
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [events, setEvents] = useState<EventItem[]>([]);
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+// ===========================
+// ✅ Wrapper to load fonts safely
+// ===========================
+export default function SchedulePageWrapper() {
+  const [fontsLoaded] = useFonts({
+    ArimaMadurai_400Regular,
+    ArimaMadurai_700Bold,
+  });
 
+  if (!fontsLoaded) {
+    // Show a simple loader while fonts are loading
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>Loading fonts...</Text>
+      </View>
+    );
+  }
+
+  // Fonts loaded → render the main schedule page
+  return <SchedulePage />;
+}
+
+// ===========================
+// 🔹 Main Schedule Page
+// ===========================
+function SchedulePage() {
+  const router = useRouter();
+
+  // 🔹 State variables
+  const [selectedDate, setSelectedDate] = useState(new Date()); // current selected date
+  const [events, setEvents] = useState<EventItem[]>([]); // all events
+  const [openIndex, setOpenIndex] = useState<number | null>(null); // for expanding event card
+  const [modalVisible, setModalVisible] = useState(false); // for Month-Year selector modal
+  const scrollRef = useRef<ScrollView>(null); // ref for scrolling dates horizontally
+
+  // 🔹 Listen for added events via custom emitter
   useEffect(() => {
     const subscription = scheduleEventEmitter.addListener(
       "eventAdded",
       (newEvent: EventItem & { editIndex?: number }) => {
         if (newEvent.editIndex !== undefined) {
+          // Edit existing event
           setEvents((prev) =>
             prev.map((e, i) => (i === newEvent.editIndex ? newEvent : e))
           );
-        } else setEvents((prev) => [...prev, newEvent]);
+        } else {
+          // Add new event
+          setEvents((prev) => [...prev, newEvent]);
+        }
       }
     );
     return () => subscription.remove();
   }, []);
 
+  // 🔹 Filter events for currently selected date
   const todayStr = selectedDate.toDateString();
   const todayEvents = events.filter((e) => e.date === todayStr);
 
+  // ===========================
+  // 🔹 Calendar Logic
+  // ===========================
+  // Get all days in the current month
   const getAllDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -65,9 +103,9 @@ const SchedulePage = () => {
     for (let i = 1; i <= lastDay; i++) days.push(new Date(year, month, i));
     return days;
   };
-
   const days = getAllDaysInMonth(selectedDate);
 
+  // Scroll to today's date on first render
   useEffect(() => {
     const todayIndex = days.findIndex(
       (d) => d.toDateString() === new Date().toDateString()
@@ -77,22 +115,28 @@ const SchedulePage = () => {
     }
   }, [days]);
 
+  // Current month-year text
   const currentMonth = selectedDate.toLocaleString("en-US", {
     month: "long",
     year: "numeric",
   });
 
+  // Month & year lists for modal
   const months = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
   ];
-  const years = Array.from({ length: 11 }, (_, i) => 2020 + i); // 2020–2030
+  const years = Array.from({ length: 11 }, (_, i) => 2020 + i);
 
+  // ===========================
+  // 🔹 Event handlers
+  // ===========================
   const handleDatePress = (day: Date) => {
     setSelectedDate(day);
     const dayStr = day.toDateString();
     const hasEvent = events.some((event) => event.date === dayStr);
 
+    // Ask user to add an event if none exists
     if (!hasEvent) {
       Alert.alert(
         "Add Event",
@@ -158,8 +202,12 @@ const SchedulePage = () => {
     setModalVisible(false);
   };
 
+  // ===========================
+  // 🔹 JSX Render
+  // ===========================
   return (
     <View style={styles.container}>
+      {/* 🔹 Page title */}
       <Text style={styles.title}>My Schedule</Text>
 
       {/* 🔹 Month-Year Selector */}
@@ -177,7 +225,7 @@ const SchedulePage = () => {
         </TouchableOpacity>
       </View>
 
-      {/* 🔹 Modal Picker */}
+      {/* 🔹 Month-Year Modal */}
       <Modal
         visible={modalVisible}
         animationType="fade"
@@ -212,10 +260,7 @@ const SchedulePage = () => {
                 <TouchableOpacity
                   style={styles.modalItem}
                   onPress={() =>
-                    handleMonthYearSelect(
-                      months[selectedDate.getMonth()],
-                      item
-                    )
+                    handleMonthYearSelect(months[selectedDate.getMonth()], item)
                   }
                 >
                   <Text style={styles.modalItemText}>{item}</Text>
@@ -263,6 +308,7 @@ const SchedulePage = () => {
         })}
       </ScrollView>
 
+      {/* 🔹 Event List Title */}
       <Text style={styles.sectionTitle}>
         Events on{" "}
         {selectedDate.toLocaleDateString("en-US", {
@@ -310,6 +356,7 @@ const SchedulePage = () => {
         contentContainerStyle={{ paddingBottom: 120 }}
       />
 
+      {/* 🔹 Add Event Button */}
       <TouchableOpacity
         style={styles.addButton}
         onPress={() => router.push("/Family/add_schedule")}
@@ -318,24 +365,24 @@ const SchedulePage = () => {
       </TouchableOpacity>
     </View>
   );
-};
+}
 
-export default SchedulePage;
-
+// ===========================
+// 🔹 Styles
+// ===========================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#E9F6EC",
     paddingTop: 60,
     paddingHorizontal: 20,
-  
   },
   title: {
     fontSize: 28,
-    fontWeight: "bold",
+    fontFamily: "ArimaMadurai_700Bold", // font applied
     color: "#04302B",
     marginBottom: 10,
-    textAlign:"center",
+    textAlign: "center",
   },
   monthSelector: {
     flexDirection: "row",
@@ -347,8 +394,8 @@ const styles = StyleSheet.create({
   monthText: {
     fontSize: 20,
     color: "#04302B",
-    fontWeight: "100",
-    marginBottom:10,
+    fontFamily: "ArimaMadurai_400Regular",
+    marginBottom: 10,
   },
   dateBar: { marginBottom: 25 },
   dayCard: {
@@ -358,18 +405,18 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 16,
     marginRight: 10,
-    height:100,
+    height: 100,
   },
   selectedDay: { backgroundColor: "#04302B" },
-  dayName: { fontSize: 14, color: "#04302B", fontWeight: "600" },
-  dayNum: { fontSize: 16, color: "#04302B", fontWeight: "bold" },
+  dayName: { fontSize: 14, color: "#04302B", fontFamily: "ArimaMadurai_400Regular" },
+  dayNum: { fontSize: 16, color: "#04302B", fontFamily: "ArimaMadurai_700Bold" },
   selectedDayText: { color: "#FFFFFF" },
   sectionTitle: {
     fontSize: 18,
     color: "#04302B",
-    fontWeight: "600",
+    fontFamily: "ArimaMadurai_700Bold",
     marginVertical: 10,
-    marginTop:-100,
+    marginTop: -100,
   },
   eventCard: {
     flexDirection: "row",
@@ -388,8 +435,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
   },
-  eventTitle: { color: "#FFFFFF", fontSize: 16, fontWeight: "500" },
-  eventTime: { color: "#B0EACD", fontSize: 15 },
+  eventTitle: { color: "#FFFFFF", fontSize: 16, fontFamily: "ArimaMadurai_700Bold" },
+  eventTime: { color: "#B0EACD", fontSize: 15, fontFamily: "ArimaMadurai_400Regular" },
   iconWrapper: {
     backgroundColor: "#04302B",
     justifyContent: "center",
@@ -404,6 +451,7 @@ const styles = StyleSheet.create({
     color: "#777",
     marginTop: 50,
     fontSize: 16,
+    fontFamily: "ArimaMadurai_400Regular",
   },
   addButton: {
     position: "absolute",
@@ -417,7 +465,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 5,
   },
-  addText: { color: "white", fontSize: 32, fontWeight: "bold", marginTop: -2 },
+  addText: { color: "white", fontSize: 32, fontFamily: "ArimaMadurai_700Bold", marginTop: -2 },
 
   // 🔹 Modal Styles
   modalOverlay: {
@@ -429,14 +477,13 @@ const styles = StyleSheet.create({
   modalBox: {
     backgroundColor: "#fff",
     borderRadius: 12,
-    
     padding: 20,
     width: "85%",
     maxHeight: "80%",
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: "700",
+    fontFamily: "ArimaMadurai_700Bold",
     color: "#05361D",
     marginVertical: 8,
     textAlign: "center",
@@ -449,12 +496,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
   },
-  modalItemText: { fontSize: 16, color: "#05361D" },
+  modalItemText: { fontSize: 16, fontFamily: "ArimaMadurai_400Regular", color: "#05361D" },
   closeButton: {
     backgroundColor: "#05361D",
     borderRadius: 8,
     paddingVertical: 10,
     marginTop: 10,
   },
-  closeText: { color: "#fff", fontWeight: "600", textAlign: "center" },
+  closeText: { color: "#fff", fontFamily: "ArimaMadurai_700Bold", textAlign: "center" },
 });
