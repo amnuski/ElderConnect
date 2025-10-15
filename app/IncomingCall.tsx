@@ -1,8 +1,17 @@
-import { Entypo, Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-export default function CallInProgressScreen() {
+export default function IncomingCallScreen() {
+  const handleAccept = () => {
+    router.push("/callattend");
+  };
+
+  const handleDecline = () => {
+    router.back();
+  };
+
   return (
     <View style={styles.container}>
       {/* Top Section: Avatar + Info */}
@@ -14,29 +23,22 @@ export default function CallInProgressScreen() {
           style={styles.avatar}
         />
         <Text style={styles.contactName}>Unknown Contact</Text>
-        <Text style={styles.callStatus}>In call...</Text>
+        <Text style={styles.callStatus}>Incoming call...</Text>
       </View>
 
       {/* Bottom Section: Call Actions */}
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.iconButton}>
-          <Ionicons name="camera-reverse" size={24} color="#0a3d2e" />
+        <TouchableOpacity style={styles.declineButton} onPress={handleDecline}>
+          <Ionicons
+            name="call"
+            size={28}
+            color="white"
+            style={{ transform: [{ rotate: "135deg" }] }}
+          />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.iconButton}>
-          <Ionicons name="mic-off" size={24} color="#0a3d2e" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.hangupButton}>
-          <MaterialIcons name="call-end" size={24} color="white" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.iconButton}>
-          <MaterialIcons name="work" size={24} color="#0a3d2e" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.iconButton}>
-          <Entypo name="dots-three-horizontal" size={20} color="#0a3d2e" />
+        <TouchableOpacity style={styles.acceptButton} onPress={handleAccept}>
+          <Ionicons name="call" size={28} color="white" />
         </TouchableOpacity>
       </View>
     </View>
@@ -66,24 +68,24 @@ const styles = StyleSheet.create({
   },
   callStatus: {
     fontSize: 16,
-    color: "#777",
+    color: "#888",
     marginTop: 8,
   },
   buttonRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    paddingHorizontal: 20,
+    paddingHorizontal: 40,
   },
-  iconButton: {
-    backgroundColor: "#e6ffe6",
-    padding: 14,
+  declineButton: {
+    backgroundColor: "red",
+    padding: 20,
     borderRadius: 50,
     alignItems: "center",
     justifyContent: "center",
   },
-  hangupButton: {
-    backgroundColor: "red",
-    padding: 16,
+  acceptButton: {
+    backgroundColor: "green",
+    padding: 20,
     borderRadius: 50,
     alignItems: "center",
     justifyContent: "center",

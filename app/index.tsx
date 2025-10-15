@@ -15,6 +15,8 @@ export default function Index() {
       <Button title=" CareTakerCall Dashboard" onPress={() => router.push("/CareTakerCall")} />
       <Button title=" DriverResponsePage Dashboard" onPress={() => router.push("/DriverResponsePage")} />
       <Button title=" callattended Dashboard" onPress={() => router.push("/callattend")} />
+      <Button title=" IncomingCall Dashboard" onPress={() => router.push("/IncomingCall")} />
+
 
 
 
