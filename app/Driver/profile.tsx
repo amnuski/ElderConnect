@@ -59,8 +59,8 @@ export default function SettingsScreen() {
 
             {/* Menu List */}
             <View style={styles.menu}>
-              <MenuItem title="Edit Profile" icon="person-outline" onPress={() => router.push('/Driver/setting/edit-profile')} />
-              <MenuItem title="Language" icon="language-outline" onPress={() => router.push('/Driver/setting/language')} />
+              <MenuItem title="Edit Profile" icon="person-outline" onPress={() => router.push('./Driver/setting/edit-profile')} />
+              <MenuItem title="Language" icon="language-outline" onPress={() => router.push('./Driver/setting/language')} />
             </View>
 
             {/* Space under menu */}
