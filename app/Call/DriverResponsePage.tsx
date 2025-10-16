@@ -93,7 +93,7 @@ export default function DriverResponseScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f0f8f0" },
+  container: { flex: 1, backgroundColor: "#f0f8f0" ,padding:10,},
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -103,6 +103,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e6ffe6",
     borderBottomLeftRadius: 15,
     borderBottomRightRadius: 15,
+    marginTop:10,
   },
   backBtn: { padding: 6, borderRadius: 8 },
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#0a3d2e" },
