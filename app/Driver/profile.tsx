@@ -17,6 +17,7 @@ import {
   ArimaMadurai_500Medium,
   ArimaMadurai_700Bold,
 } from '@expo-google-fonts/arima-madurai';
+import DriverFooter from '@/app/Footer/DriverFooter';
 
 export default function SettingsScreen() {
   const [fontsLoaded] = useFonts({
@@ -49,7 +50,7 @@ export default function SettingsScreen() {
             {/* Profile Section */}
             <View style={styles.profileSection}>
               <Image
-                source={require('../../../assets/images/elder.png')}
+                source={require('../../assets/images/elder.png')}
                 style={styles.avatar}
               />
               <Text style={styles.name}>Murukaiya Rajah</Text>
@@ -66,6 +67,8 @@ export default function SettingsScreen() {
             <View style={{ height: 40 }} />
           </ScrollView>
         </View>
+              {/* ✅ Footer */}
+          <DriverFooter activeTab="profile" />
       </SafeAreaView>
     </>
   );

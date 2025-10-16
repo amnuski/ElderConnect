@@ -47,7 +47,7 @@ export default function DriverFooter({
         router.push("/Driver/rides");
         break;
       case "profile":
-        router.push("/Driver/setting/setting");
+        router.push("/Driver/profile");
         break;
     }
   };

@@ -33,7 +33,6 @@ export default function RootLayout() {
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
           {/* Root Screens */}
-
           <Stack.Screen name="index" />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="phone-number" />
@@ -54,11 +53,13 @@ export default function RootLayout() {
           <Stack.Screen name="Call/CareTakerCall" />
           <Stack.Screen name="Call/DriverCall" />
           <Stack.Screen name="Call/FamilyCall" />
+          <Stack.Screen name="Call/contactList" />
+
 
           {/* Driver Screens */}
           <Stack.Screen name="Driver/Driver-dash" />
           <Stack.Screen name="Driver/ride" />
-          {/* <Stack.Screen name="Driver/setting/setting" /> */}
+          <Stack.Screen name="Driver/profile" />
           <Stack.Screen name="Driver/setting/edit-profile" />
           <Stack.Screen name="Driver/setting/language" />
 

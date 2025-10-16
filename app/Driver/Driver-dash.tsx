@@ -1,11 +1,17 @@
 // app/Driver/dash.tsx
 import React from "react";
-import { View, Text, TouchableOpacity, Image, StyleSheet, SafeAreaView } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  SafeAreaView,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import Footer from "../Footer/DriverFooter";
 import { router } from "expo-router";
-
 import {
   useFonts,
   ArimaMadurai_400Regular,
@@ -18,9 +24,7 @@ export default function DriverDash() {
     ArimaMadurai_700Bold,
   });
 
-  if (!fontsLoaded) {
-    return null;
-  }
+  if (!fontsLoaded) return null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -40,15 +44,27 @@ export default function DriverDash() {
             </View>
           </View>
           <TouchableOpacity style={styles.bellButton}>
-            <Ionicons name="notifications-outline" size={26} color="#003C1F"
-               onPress={() => router.push("/Call/DriverResponsePage") as any}
-             />
+            <Ionicons
+              name="notifications-outline"
+              size={26}
+              color="#003C1F"
+              onPress={() => router.push("/Call/DriverResponsePage")}
+            />
           </TouchableOpacity>
         </View>
 
-        {/* Body content */}
+        {/* Body */}
         <View style={styles.body}>
           <Text style={styles.placeholderText}>Your dashboard content here</Text>
+
+          {/* Call Icon */}
+          <TouchableOpacity
+            style={styles.callIconContainer}
+            onPress={() => router.push("/Call/contactList")}
+          >
+            <Ionicons name="call-outline" size={32} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.callLabel}>Contacts</Text>
         </View>
 
         {/* Footer */}
@@ -61,13 +77,8 @@ export default function DriverDash() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  gradient: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
+  container: { flex: 1 },
+  gradient: { flex: 1, justifyContent: "space-between" },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -75,16 +86,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: 40,
   },
-  userInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  profileIcon: {
-    width: 45,
-    height: 45,
-    marginRight: 10,
-    borderRadius: 50,
-  },
+  userInfo: { flexDirection: "row", alignItems: "center" },
+  profileIcon: { width: 45, height: 45, marginRight: 10, borderRadius: 50 },
   welcomeText: {
     fontSize: 16,
     color: "#333",
@@ -100,17 +103,24 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 50,
   },
-  body: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  body: { flex: 1, justifyContent: "center", alignItems: "center" },
   placeholderText: {
     fontSize: 16,
     color: "#888",
     fontFamily: "ArimaMadurai_400Regular",
+    marginBottom: 20,
   },
-  footerContainer: {
-    width: "100%",
+  callIconContainer: {
+    backgroundColor: "#0A3D2E",
+    padding: 18,
+    borderRadius: 50,
+    elevation: 4,
   },
+  callLabel: {
+    fontSize: 16,
+    color: "#0A3D2E",
+    marginTop: 10,
+    fontFamily: "ArimaMadurai_700Bold",
+  },
+  footerContainer: { width: "100%" },
 });
