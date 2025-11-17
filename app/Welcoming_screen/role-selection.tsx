@@ -5,6 +5,7 @@ import {
 } from "@expo-google-fonts/arima-madurai";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import apiService from "../../constants/api";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -108,11 +109,41 @@ export default function RoleSelectionScreen() {
     ]).start();
   };
 
-  const handleContinue = () => {
-    if (selectedRole === "elder" || selectedRole === "family") {
-      router.push("/Welcoming_screen/profile-info");
-    } else if (selectedRole === "driver") {
-      router.push("/Welcoming_screen/driver-profile");
+  const handleContinue = async () => {
+    if (!selectedRole) return;
+
+    try {
+      // Update user role in backend
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      
+      const userDataStr = await AsyncStorage.getItem('userData');
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr);
+        const response = await apiService.updateProfile(userData._id, { role: selectedRole });
+
+        // Persist updated user data locally so other screens (dashboards) reflect role change
+        try {
+          if (response?.user) {
+            await AsyncStorage.setItem('userData', JSON.stringify(response.user));
+          }
+        } catch (e) {
+          console.warn('Failed to persist updated user data after role change:', e);
+        }
+      }
+
+      if (selectedRole === "elder" || selectedRole === "family") {
+        router.push({
+          pathname: "/Welcoming_screen/profile-info",
+          params: { role: selectedRole },
+        });
+      } else if (selectedRole === "driver") {
+        router.push({
+          pathname: "/Welcoming_screen/driver-profile",
+          params: { role: selectedRole },
+        });
+      }
+    } catch (error: any) {
+      alert(error.message || "Failed to update role. Please try again.");
     }
   };
 

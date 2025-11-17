@@ -4,8 +4,10 @@ import { useFonts } from "expo-font";
 import { SplashScreen, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+
+// Import react-native-reanimated (must be imported at the top)
+import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/useColorScheme";
 
@@ -34,13 +36,12 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           {/* Root Screens */}
           <Stack.Screen name="index" />
-          <Stack.Screen name="onboarding" />
-          <Stack.Screen name="phone-number" />
-          <Stack.Screen name="otp" />
-          <Stack.Screen name="role-selection" />
-          <Stack.Screen name="profile-info" />
-          <Stack.Screen name="driver-profile" />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="Welcoming_screen/onboarding" />
+          <Stack.Screen name="Welcoming_screen/verify-num" />
+          <Stack.Screen name="Welcoming_screen/otp" />
+          <Stack.Screen name="Welcoming_screen/role-selection" />
+          <Stack.Screen name="Welcoming_screen/profile-info" />
+          <Stack.Screen name="Welcoming_screen/driver-profile" />
 
           {/* Family Screens */}
           <Stack.Screen name="Family/schedule_page" />
@@ -58,7 +59,7 @@ export default function RootLayout() {
 
           {/* Driver Screens */}
           <Stack.Screen name="Driver/Driver-dash" />
-          <Stack.Screen name="Driver/ride" />
+          <Stack.Screen name="Driver/rides" />
           <Stack.Screen name="Driver/profile" />
           <Stack.Screen name="Driver/setting/edit-profile" />
           <Stack.Screen name="Driver/setting/language" />
@@ -68,7 +69,7 @@ export default function RootLayout() {
           <Stack.Screen name="setting/setting" />
           <Stack.Screen name="setting/addDriver" />
           <Stack.Screen name="setting/addFamily" />
-          <Stack.Screen name="setting/emgencyAdd" />
+          <Stack.Screen name="setting/emergencyAdd" />
           <Stack.Screen name="setting/profile" />
           <Stack.Screen name="setting/setLanguage" />
         </Stack>

@@ -18,10 +18,12 @@ import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
 } from "@expo-google-fonts/arima-madurai";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import apiService from "../../constants/api";
 
 export default function ProfileInfoScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const [firstName, setFirstName] = useState<string>("");
   const [imageUri, setImageUri] = useState<string | null>(null);
 
@@ -46,13 +48,58 @@ export default function ProfileInfoScreen() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!firstName.trim()) {
       alert("Please enter your name");
       return;
     }
-    console.log("Submitted:", { firstName, imageUri });
-    router.push("/Family/dash");
+
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      
+      // Get user data from storage
+      const userDataStr = await AsyncStorage.getItem('userData');
+      if (!userDataStr) {
+        alert("User data not found. Please login again.");
+        router.push("/Welcoming_screen/verify-num");
+        return;
+      }
+
+      const userData = JSON.parse(userDataStr);
+      const role = (params.role as string) || userData.role || 'elder';
+
+      // Update user profile
+      const updateData: any = {
+        firstName: firstName.trim(),
+        role: role,
+      };
+
+      if (imageUri) {
+        updateData.profileImage = imageUri;
+      }
+
+      const response = await apiService.updateProfile(userData._id, updateData);
+
+      // Persist updated user data locally so dashboards show updated name/image immediately
+      try {
+        if (response?.user) {
+          await AsyncStorage.setItem('userData', JSON.stringify(response.user));
+        }
+      } catch (e) {
+        console.warn('Failed to persist updated user data:', e);
+      }
+
+      // Navigate based on role
+      if (role === 'driver') {
+        router.push("/Driver/Driver-dash");
+      } else if (role === 'family') {
+        router.push("/Family/dash");
+      } else {
+        router.push("/Family/dash"); // Default to family dashboard for elders
+      }
+    } catch (error: any) {
+      alert(error.message || "Failed to save profile. Please try again.");
+    }
   };
 
   return (

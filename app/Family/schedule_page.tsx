@@ -21,6 +21,7 @@ import {
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import scheduleEventEmitter from "./scheduleEventEmitter";
+import apiService from "../../constants/api";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -52,6 +53,28 @@ const SchedulePage = () => {
       }
     );
     return () => subscription.remove();
+  }, []);
+
+  // Load schedules from backend on mount
+  useEffect(() => {
+    const loadSchedules = async () => {
+      try {
+        const response = await apiService.getSchedules();
+        if (response?.schedules) {
+          // Map backend schedules to EventItem shape
+          const mapped = response.schedules.map((s: any) => ({
+            title: s.title,
+            time: s.time,
+            date: new Date(s.date).toDateString(),
+          }));
+          setEvents(mapped);
+        }
+      } catch (e) {
+        console.warn('Failed to load schedules', e);
+      }
+    };
+
+    loadSchedules();
   }, []);
 
   const todayStr = selectedDate.toDateString();

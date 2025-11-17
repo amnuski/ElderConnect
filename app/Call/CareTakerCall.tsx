@@ -1,3 +1,4 @@
+// app/Call/CareTakerCall.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -31,7 +32,7 @@ interface AnimatedIconProps {
   onPress?: () => void;
 }
 
-export default function DriverCall() {
+export default function CareTakerCall() {
   const [contacts, setContacts] = useState<Contact[]>([
     { id: 1, name: "Raja", phone: "0771234567" },
     { id: 2, name: "Hiruni", phone: "0719876543" },
@@ -42,6 +43,7 @@ export default function DriverCall() {
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
 
+  // Animated Icon Component
   const AnimatedIcon: React.FC<AnimatedIconProps> = ({
     name,
     size = 24,
@@ -49,6 +51,7 @@ export default function DriverCall() {
     onPress,
   }) => {
     const scale = useRef(new Animated.Value(1)).current;
+
     return (
       <Pressable
         onPressIn={() =>
@@ -67,6 +70,7 @@ export default function DriverCall() {
     );
   };
 
+  // Open modals
   const openAddModal = () => {
     setEditingContact(null);
     setNameInput("");
@@ -81,11 +85,13 @@ export default function DriverCall() {
     setModalVisible(true);
   };
 
+  // Save contact
   const saveContact = () => {
     if (!nameInput.trim() || !phoneInput.trim()) {
       Alert.alert("Validation", "Please enter name and phone number.");
       return;
     }
+
     if (editingContact) {
       setContacts((prev) =>
         prev.map((c) =>
@@ -103,9 +109,11 @@ export default function DriverCall() {
       ]);
       Alert.alert("Added", "New contact added successfully!");
     }
+
     setModalVisible(false);
   };
 
+  // Delete contact
   const deleteContact = (contact: Contact) => {
     Alert.alert(
       "Delete contact",
@@ -124,6 +132,7 @@ export default function DriverCall() {
     );
   };
 
+  // Swipeable actions
   const renderRightActions = (contact: Contact) => (
     <View style={styles.rightActionContainer}>
       <Pressable onPress={() => openEditModal(contact)} style={styles.smallActionBtn}>
@@ -138,6 +147,7 @@ export default function DriverCall() {
     </View>
   );
 
+  // Render contact row
   const renderContact: ListRenderItem<Contact> = ({ item }) => (
     <Swipeable renderRightActions={() => renderRightActions(item)}>
       <View style={styles.contactCard}>
@@ -264,14 +274,14 @@ export default function DriverCall() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 30, marginTop:0, paddingTop: Platform.OS === "android" ? 10 : 20,overflow: "hidden",},
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 ,marginTop:25,},
-  headerText: { fontSize: 22, fontWeight: "700", color: "#0a3d2e", marginLeft: 10 ,marginBottom:10},
+  container: { flex: 1, paddingHorizontal: 30, paddingTop: Platform.OS === "android" ? 10 : 20 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14, marginTop: 25 },
+  headerText: { fontSize: 22, fontWeight: "700", color: "#0a3d2e", marginLeft: 10, marginBottom: 10 },
   contactCard: { flexDirection: "row", backgroundColor: "#0a3d2e", paddingVertical: 18, paddingHorizontal: 16, borderRadius: 14, alignItems: "center", justifyContent: "space-between" },
   callerName: { color: "white", fontSize: 18, fontWeight: "700" },
   callerPhone: { color: "#a3c9b9", fontSize: 13, marginTop: 4 },
   callActions: { flexDirection: "row", alignItems: "center" },
-  rightActionContainer: { flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "#155e4a",  borderBottomRightRadius: 14,borderTopRightRadius:14, paddingVertical: 18, marginLeft: -7, paddingHorizontal: 10, marginBottom: 1 },
+  rightActionContainer: { flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "#155e4a", borderBottomRightRadius: 14, borderTopRightRadius: 14, paddingVertical: 18, marginLeft: -7, paddingHorizontal: 10, marginBottom: 1 },
   smallActionBtn: { height: 36, width: 36, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   floatingBtn: { position: "absolute", bottom: 60, right: 24, backgroundColor: "#0a3d2e", borderRadius: 30, padding: 14, elevation: 6, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
   modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" },
@@ -279,5 +289,4 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: "700", color: "#0a3d2e", marginBottom: 8 },
   input: { borderWidth: 1, borderColor: "#e3e3e3", borderRadius: 10, paddingHorizontal: 12, paddingVertical: Platform.OS === "ios" ? 12 : 8, color: "#0a3d2e", fontSize: 15 },
   modalBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  
 });

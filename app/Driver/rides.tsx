@@ -9,6 +9,8 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import {
   ArimaMadurai_400Regular,
@@ -18,6 +20,7 @@ import {
 import { MaterialIcons } from "@expo/vector-icons";
 import scheduleEventEmitter from "../Family/scheduleEventEmitter"; // same emitter used in Family Schedule
 import DriverFooter from "../Footer/DriverFooter"; // ✅ Import footer
+import apiService from "../../constants/api";
 
 if (
   Platform.OS === "android" &&
@@ -32,10 +35,26 @@ interface EventItem {
   date: string;
 }
 
+interface RideItem {
+  _id: string;
+  title: string;
+  time: string;
+  date: string;
+  pickupLocation: string;
+  dropLocation: string;
+  status: string;
+  charge?: number;
+  distance?: number;
+  paymentStatus?: string;
+}
+
 const DriverSchedulePage = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [rides, setRides] = useState<RideItem[]>([]);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const [fontsLoaded] = useFonts({
@@ -44,6 +63,8 @@ const DriverSchedulePage = () => {
   });
 
   useEffect(() => {
+    loadRides();
+    
     const subscription = scheduleEventEmitter.addListener(
       "eventAdded",
       (newEvent: EventItem & { editIndex?: number }) => {
@@ -59,12 +80,57 @@ const DriverSchedulePage = () => {
     return () => subscription.remove();
   }, []);
 
+  const loadRides = async () => {
+    try {
+      setLoading(true);
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      
+      const userDataStr = await AsyncStorage.getItem('userData');
+      if (!userDataStr) return;
+      
+      const userData = JSON.parse(userDataStr);
+      const response = await apiService.getRides({ driverId: userData._id });
+      
+      if (response.rides) {
+        // Convert rides to event format for display
+        const rideEvents: RideItem[] = response.rides.map((ride: any) => ({
+          _id: ride._id,
+          title: `${ride.pickupLocation} → ${ride.dropLocation}`,
+          time: new Date(ride.scheduledTime).toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          }),
+          date: new Date(ride.scheduledTime).toDateString(),
+          pickupLocation: ride.pickupLocation,
+          dropLocation: ride.dropLocation,
+          status: ride.status,
+          charge: ride.charge,
+          distance: ride.distance,
+          paymentStatus: ride.paymentStatus,
+        }));
+        setRides(rideEvents);
+      }
+    } catch (error) {
+      console.error('Error loading rides:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadRides();
+  };
+
   const today = new Date();
   const todayStr = today.toDateString();
 
-  const todayEvents = events.filter(
-    (e) => e.date === selectedDate.toDateString()
-  );
+  // Combine events and rides for today
+  const todayEvents = [
+    ...events.filter((e) => e.date === selectedDate.toDateString()),
+    ...rides.filter((r) => r.date === selectedDate.toDateString()),
+  ];
 
   const getAllDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -164,35 +230,59 @@ const DriverSchedulePage = () => {
       </Text>
 
       {/* Events List */}
-      <FlatList
-        data={todayEvents}
-        keyExtractor={(_, index) => index.toString()}
-        renderItem={({ item, index }) => {
-          const isOpen = openIndex === index;
-          return (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => toggleOpen(index)}
-              style={styles.eventCard}
-            >
-              <View style={styles.eventTextContainer}>
-                <Text style={styles.eventTitle}>{item.title}</Text>
-                <Text style={styles.eventTime}>{item.time}</Text>
-              </View>
-
-              {isOpen && (
-                <View style={styles.iconWrapper}>
-                  <MaterialIcons name="event" size={22} color="#CFE7D3" />
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", marginTop: 50 }}>
+          <ActivityIndicator size="large" color="#04302B" />
+        </View>
+      ) : (
+        <FlatList
+          data={todayEvents}
+          keyExtractor={(item, index) => (item as any)._id || index.toString()}
+          renderItem={({ item, index }) => {
+            const isOpen = openIndex === index;
+            const rideItem = item as RideItem;
+            return (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => toggleOpen(index)}
+                style={styles.eventCard}
+              >
+                <View style={styles.eventTextContainer}>
+                  <Text style={styles.eventTitle}>{item.title}</Text>
+                  <Text style={styles.eventTime}>{item.time}</Text>
+                  {rideItem.charge && (
+                    <Text style={styles.chargeText}>
+                      Charge: Rs. {rideItem.charge.toFixed(2)}
+                      {rideItem.distance && ` (${rideItem.distance} km)`}
+                    </Text>
+                  )}
+                  {rideItem.status && (
+                    <Text style={[styles.statusText, { 
+                      color: rideItem.status === 'completed' ? '#4CAF50' : 
+                             rideItem.status === 'in_progress' ? '#FF9800' : '#757575'
+                    }]}>
+                      Status: {rideItem.status}
+                    </Text>
+                  )}
                 </View>
-              )}
-            </TouchableOpacity>
-          );
-        }}
-        ListEmptyComponent={
-          <Text style={styles.noEvent}>No events for this day</Text>
-        }
-        contentContainerStyle={{ paddingBottom: 100 }}
-      />
+
+                {isOpen && (
+                  <View style={styles.iconWrapper}>
+                    <MaterialIcons name="event" size={22} color="#CFE7D3" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }}
+          ListEmptyComponent={
+            <Text style={styles.noEvent}>No rides for this day</Text>
+          }
+          contentContainerStyle={{ paddingBottom: 100 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        />
+      )}
 
       {/* ✅ Footer */}
 <View style={{ marginHorizontal: -20 }}>
@@ -306,6 +396,17 @@ const styles = StyleSheet.create({
     color: "#777",
     marginTop: 50,
     fontSize: 16,
+    fontFamily: "ArimaMadurai_400Regular",
+  },
+  chargeText: {
+    fontSize: 14,
+    color: "#2E7D32",
+    marginTop: 5,
+    fontFamily: "ArimaMadurai_700Bold",
+  },
+  statusText: {
+    fontSize: 12,
+    marginTop: 3,
     fontFamily: "ArimaMadurai_400Regular",
   },
   modalOverlay: {

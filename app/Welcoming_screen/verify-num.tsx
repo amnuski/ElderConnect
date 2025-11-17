@@ -23,6 +23,7 @@ import {
 import CountryPicker, { CountryCode } from "react-native-country-picker-modal";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useRouter } from "expo-router";
+import apiService from "../../constants/api";
 
 export default function PhoneNumberScreen() {
   const router = useRouter();
@@ -40,7 +41,7 @@ export default function PhoneNumberScreen() {
 
   if (!fontsLoaded) return null;
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     if (!phoneNumber || phoneNumber.length < 9) {
       Alert.alert("Error", "Please enter a valid phone number");
       return;
@@ -51,17 +52,25 @@ export default function PhoneNumberScreen() {
 
     setLoading(true);
 
-    // Simulate sending OTP
-    setTimeout(() => {
+    try {
+      const response = await apiService.sendOTP(fullNumber);
+      // If the backend indicates an existing user, show account brief info
+      if (response?.userExists) {
+        const user = response.user;
+        Alert.alert("Account found", `An account already exists for ${fullNumber} (Name: ${user?.firstName || 'Unknown'}, Role: ${user?.role || 'Not set'})`);
+      }
       setLoading(false);
-      Alert.alert("Code Sent", `OTP sent to ${fullNumber}`);
+      Alert.alert("Code Sent", `OTP sent to ${fullNumber}${response.devOTP ? `\n\nDev OTP: ${response.devOTP}` : ''}`);
 
       // Navigate to OTP screen with phone number as param
       router.push({
         pathname: "/Welcoming_screen/otp",
         params: { phone: fullNumber },
       });
-    }, 1000);
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert("Error", error.message || "Failed to send OTP. Please try again.");
+    }
   };
 
   return (

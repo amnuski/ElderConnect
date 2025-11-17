@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as Notifications from 'expo-notifications';
+import apiService from "../../constants/api";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,6 +34,7 @@ const AddSchedule = () => {
 
   const [title, setTitle] = useState("");
   const [time, setTime] = useState("");
+  const [selectedTime, setSelectedTime] = useState<Date | null>(null);
   const [driver, setDriver] = useState("");
   const [fromLocation, setFromLocation] = useState("");
   const [toLocation, setToLocation] = useState("");
@@ -66,22 +69,95 @@ const AddSchedule = () => {
   };
 
   // ✅ Save event
-  const handleAdd = () => {
-    if (!title || !time || !fromLocation || !toLocation) {
+  const handleAdd = async () => {
+    if (!title || !time || !fromLocation || !toLocation || !selectedTime) {
       Alert.alert("Error", "Please fill all required fields!");
       return;
     }
 
-    scheduleEventEmitter.emit("eventAdded", {
-      title,
-      time,
-      date: date.toDateString(),
-      driver,
-      location: `${fromLocation} → ${toLocation}`,
-    });
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const userDataStr = await AsyncStorage.getItem('userData');
+      if (!userDataStr) {
+        Alert.alert('Error', 'User not found. Please login again.');
+        router.push('/Welcoming_screen/verify-num');
+        return;
+      }
+      const userData = JSON.parse(userDataStr);
 
-    Alert.alert("Success", "Event saved successfully!");
-    router.back();
+      // Build a Date object for the scheduled datetime (combine selected date and time)
+      const scheduledDate = new Date(date);
+      scheduledDate.setHours(selectedTime.getHours());
+      scheduledDate.setMinutes(selectedTime.getMinutes());
+      scheduledDate.setSeconds(0);
+
+      // Prepare payload for backend. Use elderId/familyId as current user when relation not available.
+      const payload: any = {
+        elderId: userData._id,
+        familyId: userData._id,
+        title,
+        date: scheduledDate.toISOString(),
+        time,
+        fromLocation,
+        toLocation,
+      };
+
+      // Create schedule on backend
+      const response = await apiService.createSchedule(payload);
+      if (response?.schedule) {
+        const created = response.schedule;
+
+        // Emit local event to update schedule list in UI
+        // Provide both ISO and formatted date so all listeners can consume the shape they expect
+        scheduleEventEmitter.emit('eventAdded', {
+          title: created.title,
+          time: created.time,
+          date: new Date(created.date).toDateString(), // human readable date for list components
+          iso: created.date, // keep ISO for dashboards that want precise filtering
+          fromLocation: created.fromLocation,
+          toLocation: created.toLocation,
+          location: `${created.fromLocation || ''}${created.toLocation ? ` → ${created.toLocation}` : ''}`,
+        });
+
+        // Request permission and schedule local notification
+        try {
+          const { status } = await Notifications.requestPermissionsAsync();
+          if (status === 'granted') {
+            const seconds = Math.floor((scheduledDate.getTime() - Date.now()) / 1000);
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: `Reminder: ${title}`,
+                body: `Scheduled at ${time}`,
+                data: { scheduleId: created._id },
+              },
+              trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.max(seconds, 1) },
+            });
+          }
+        } catch (nErr) {
+          console.warn('Failed to schedule notification', nErr);
+        }
+
+        Alert.alert('Success', 'Event saved successfully!');
+        router.back();
+        return;
+      }
+
+      // Fallback: emit locally if backend did not return schedule
+      scheduleEventEmitter.emit('eventAdded', {
+        title,
+        time,
+        date: scheduledDate.toDateString(),
+        iso: scheduledDate.toISOString(),
+        fromLocation,
+        toLocation,
+        location: `${fromLocation || ''}${toLocation ? ` → ${toLocation}` : ''}`,
+      });
+      Alert.alert('Success', 'Event saved locally');
+      router.back();
+    } catch (error: any) {
+      console.error('Add schedule error', error);
+      Alert.alert('Error', error.message || 'Failed to save event');
+    }
   };
 
   // ✅ Format time
@@ -141,7 +217,10 @@ const AddSchedule = () => {
           display="spinner"
           onChange={(event, selectedTime) => {
             setShowTimePicker(false);
-            if (selectedTime) setTime(formatTime(selectedTime));
+            if (selectedTime) {
+              setSelectedTime(selectedTime);
+              setTime(formatTime(selectedTime));
+            }
           }}
         />
       )}

@@ -1,5 +1,5 @@
 // app/Driver/dash.tsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Image,
   StyleSheet,
   SafeAreaView,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,14 +18,65 @@ import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
 } from "@expo-google-fonts/arima-madurai";
+import apiService from "../../constants/api";
 
 export default function DriverDash() {
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
+  const [userData, setUserData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!fontsLoaded) return null;
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      
+      // Try to get from storage first
+      const userDataStr = await AsyncStorage.getItem('userData');
+      let storedUserData = null;
+      if (userDataStr) {
+        storedUserData = JSON.parse(userDataStr);
+        setUserData(storedUserData);
+      }
+      
+      // Fetch latest from backend (use /me endpoint which doesn't need userId)
+      const response = await apiService.getUserProfile();
+      if (response.user) {
+        setUserData(response.user);
+        await AsyncStorage.setItem('userData', JSON.stringify(response.user));
+      } else if (storedUserData) {
+        // If backend call fails but we have stored data, keep using it
+        setUserData(storedUserData);
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      // If error, try to use stored data if available
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const userDataStr = await AsyncStorage.getItem('userData');
+        if (userDataStr) {
+          setUserData(JSON.parse(userDataStr));
+        }
+      } catch (e) {
+        console.error('Error loading from storage:', e);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#042222" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -40,7 +92,9 @@ export default function DriverDash() {
             />
             <View>
               <Text style={styles.welcomeText}>Welcome</Text>
-              <Text style={styles.nameText}>Driver !</Text>
+              <Text style={styles.nameText}>
+                {userData?.firstName || "Driver"}!
+              </Text>
             </View>
           </View>
           <TouchableOpacity style={styles.bellButton}>
@@ -60,7 +114,7 @@ export default function DriverDash() {
           {/* Call Icon */}
           <TouchableOpacity
             style={styles.callIconContainer}
-            onPress={() => router.push("/Call/contactList")}
+            onPress={() => router.push("//Call/contactList")}
           >
             <Ionicons name="call-outline" size={32} color="#fff" />
           </TouchableOpacity>

@@ -2,7 +2,7 @@
 import { ArimaMadurai_400Regular, ArimaMadurai_700Bold, useFonts } from "@expo-google-fonts/arima-madurai";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -16,27 +16,84 @@ import {
 } from "react-native";
 import Footer from "../Footer/footer";
 import { useRouter } from "expo-router";
+import apiService from "../../constants/api";
+import scheduleEventEmitter from "./scheduleEventEmitter";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 export default function Dashboard() {
+  // Hooks: keep in a stable order to avoid React Hooks order errors
+  let [fontsLoaded] = useFonts({
+    ArimaMadurai_400Regular,
+    ArimaMadurai_700Bold,
+  });
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("home");
   const [selectedActivity, setSelectedActivity] = useState<number | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  let [fontsLoaded] = useFonts({
-    ArimaMadurai_400Regular,
-    ArimaMadurai_700Bold,
-  });
-  if (!fontsLoaded) return null;
+  const [userData, setUserData] = useState<any>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [schedules, setSchedules] = useState<any[]>([]);
 
-  const activities = [
-    { id: 1, title: "Go to Temple", time: "8.00 AM" },
-    { id: 2, title: "Doctor Appointment", time: "2.00 PM" },
-    { id: 3, title: "Grocery Shopping", time: "4.00 PM" },
-    { id: 4, title: "Family Visit", time: "6.00 PM" },
-  ];
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const userDataStr = await AsyncStorage.getItem('userData');
+        let storedUser = null;
+        if (userDataStr) {
+          storedUser = JSON.parse(userDataStr);
+          setUserData(storedUser);
+        }
+
+        // Try fetching fresh data from backend
+        try {
+          const response = await apiService.getUserProfile();
+          if (response?.user) {
+            setUserData(response.user);
+            await AsyncStorage.setItem('userData', JSON.stringify(response.user));
+          }
+        } catch (e) {
+          // ignore network errors, keep stored user
+        }
+      } catch (e) {
+        console.warn('Failed to load user data for family dashboard', e);
+      } finally {
+        setLoadingUser(false);
+      }
+    };
+
+    loadUser();
+    // also load schedules for header quick view
+    const loadSchedules = async () => {
+      try {
+        const response = await apiService.getSchedules();
+        if (response?.schedules) {
+          setSchedules(response.schedules || []);
+        }
+      } catch (e) {
+        console.warn('Failed to load schedules for header', e);
+      }
+    };
+    loadSchedules();
+  }, []);
+
+  // Derive activities from schedules: prefer today's schedules, otherwise show upcoming
+  const todayStr = new Date().toDateString();
+  const todays = schedules.filter((s) => new Date(s.date).toDateString() === todayStr);
+  const upcoming = schedules
+    .filter((s) => new Date(s.date).toDateString() !== todayStr)
+    .slice(0, 4 - todays.length);
+
+  const activities = (
+    todays.concat(upcoming)
+  ).map((s, idx) => ({
+    id: idx + 1,
+    title: s.title || s.eventTitle || 'Event',
+    time: s.time || (s.date ? new Date(s.date).toLocaleTimeString() : ''),
+    location: s.location || `${s.fromLocation || ''}${s.toLocation ? ` → ${s.toLocation}` : ''}`,
+  }));
 
   const quickActions = [
     { icon: "call", route: "/Call/DriverCall" },
@@ -67,6 +124,38 @@ export default function Dashboard() {
     setActiveIndex(index);
   };
 
+  // Listen for scheduleEventEmitter to update schedules live when adding from AddSchedule
+  useEffect(() => {
+    const sub = scheduleEventEmitter.addListener('eventAdded', (newEvent: any) => {
+      // Normalize incoming event. Prefer `iso` when present (emitted by add_schedule),
+      // otherwise try to parse `date` which may be human-readable or ISO.
+      let isoDate: string | null = null;
+      if (newEvent.iso) {
+        isoDate = newEvent.iso;
+      } else if (newEvent.date) {
+        try {
+          const parsed = new Date(newEvent.date);
+          if (!isNaN(parsed.getTime())) isoDate = parsed.toISOString();
+        } catch (e) {
+          isoDate = null;
+        }
+      }
+
+      const normalized = {
+        title: newEvent.title,
+        time: newEvent.time,
+        date: isoDate || newEvent.date || new Date().toISOString(),
+        location: newEvent.location || `${newEvent.fromLocation || ''}${newEvent.toLocation ? ` → ${newEvent.toLocation}` : ''}`,
+      };
+
+      setSchedules((prev) => [normalized, ...prev]);
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Delay rendering until fonts and user load are ready — placed after all hooks
+  if (!fontsLoaded || loadingUser) return null;
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
@@ -81,15 +170,25 @@ export default function Dashboard() {
         <View style={styles.header}>
           <View style={styles.profileSection}>
             <Image
-              source={{
-                uri: "https://www.maplewoodseniorliving.com/wp-content/uploads/2024/01/shutterstock_1926698987-Low-Res-scaled.jpg",
-              }}
+              source={
+                userData?.profileImage
+                  ? { uri: userData.profileImage }
+                  : require("../../assets/images/profile.png")
+              }
               style={styles.profileImage}
             />
             <View>
               <Text style={styles.welcomeText}>Welcome</Text>
-              <Text style={styles.userName}>Anne !</Text>
+              <Text style={styles.userName}>{userData?.firstName ? `${userData.firstName} !` : 'User'}</Text>
             </View>
+          </View>
+          {/* Quick upcoming schedules preview */}
+          <View style={{ marginLeft: 12 }}>
+            {schedules.slice(0,2).map((s, idx) => (
+              <Text key={idx} style={{ fontSize: 12, color: '#045' }}>
+                {s.title} • {new Date(s.date).toLocaleDateString()} {s.time}
+              </Text>
+            ))}
           </View>
           <TouchableOpacity style={styles.notificationButton}>
             <Ionicons name="notifications-outline" size={24} color="#04302B" />
@@ -126,6 +225,9 @@ export default function Dashboard() {
                   <View style={styles.activityContent}>
                     <Text style={styles.activityTitle}>{activity.title}</Text>
                     <Text style={styles.activityTime}>{activity.time}</Text>
+                    {activity.location ? (
+                      <Text style={styles.activityLocation}>{activity.location}</Text>
+                    ) : null}
                   </View>
                   {selectedActivity === activity.id && (
                     <View style={styles.editActions}>
@@ -249,6 +351,7 @@ const styles = StyleSheet.create({
   activityContent: { flex: 1 },
   activityTitle: { fontFamily: "ArimaMadurai_700Bold", fontSize: screenWidth * 0.045, color: "#04302B", marginBottom: screenHeight * 0.01 },
   activityTime: { fontFamily: "ArimaMadurai_400Regular", fontSize: screenWidth * 0.04, color: "#000" },
+  activityLocation: { fontFamily: "ArimaMadurai_400Regular", fontSize: screenWidth * 0.035, color: "#555", marginTop: screenHeight * 0.008 },
   editActions: {
     position: "absolute",
     right: 0,
