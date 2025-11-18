@@ -36,7 +36,10 @@ async function apiRequest<T = any>(
 
   // Add authentication token if available
   try {
-    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+    const AsyncStorageModule = await import('@react-native-async-storage/async-storage');
+    const AsyncStorage = (AsyncStorageModule.default || AsyncStorageModule) as unknown as {
+      getItem: (key: string) => Promise<string | null>;
+    };
     const accessToken = await AsyncStorage.getItem('accessToken');
     if (accessToken) {
       defaultHeaders['Authorization'] = `Bearer ${accessToken}`;
