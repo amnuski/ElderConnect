@@ -1,5 +1,5 @@
 // app/Welcoming_screen/profile-info.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,27 +9,42 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   useFonts,
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
 } from "@expo-google-fonts/arima-madurai";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { apiPut } from "@/services/api";
 
 export default function ProfileInfoScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const role = params.role as string; // 'elder' or 'family'
+  
   const [firstName, setFirstName] = useState<string>("");
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // Load fonts
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
+
+  useEffect(() => {
+    if (!role) {
+      Alert.alert("Error", "Role is required");
+      router.back();
+    }
+  }, [role]);
 
   if (!fontsLoaded) return null;
 
@@ -46,13 +61,52 @@ export default function ProfileInfoScreen() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!firstName.trim()) {
-      alert("Please enter your name");
+      Alert.alert("Error", "Please enter your name");
       return;
     }
-    console.log("Submitted:", { firstName, imageUri });
-    router.push("/Family/dash");
+
+    if (!role) {
+      Alert.alert("Error", "Role is missing");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Update user profile with role and name
+      const updateData: any = {
+        firstName: firstName.trim(),
+        role: role,
+      };
+
+      // Add profile image if selected (in production, upload to server first)
+      if (imageUri) {
+        updateData.profileImage = imageUri; // In production, upload to cloud storage first
+      }
+
+      const response = await apiPut<{ user: any }>('/users/me', updateData);
+
+      // Update stored user data
+      await AsyncStorage.setItem('user', JSON.stringify(response.user));
+
+      setLoading(false);
+
+      // Navigate to dashboard based on role
+      if (role === 'elder' || role === 'family') {
+        router.replace('/Family/dash');
+      } else {
+        router.replace('/Welcoming_screen/role-selection');
+      }
+    } catch (error: any) {
+      setLoading(false);
+      console.error('Profile update error:', error);
+      Alert.alert(
+        "Error",
+        error.message || "Failed to save profile. Please try again."
+      );
+    }
   };
 
   return (
@@ -115,18 +169,23 @@ export default function ProfileInfoScreen() {
           onPress={handleSubmit}
           activeOpacity={0.85}
           style={{ width: "100%", marginTop: 30 }}
+          disabled={loading}
         >
           <LinearGradient
             colors={["#042222", "#042222"]}
-            style={styles.submitButton}
+            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
           >
-            <Text
-              style={[styles.submitText, { fontFamily: "ArimaMadurai_700Bold" }]}
-            >
-              Continue
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text
+                style={[styles.submitText, { fontFamily: "ArimaMadurai_700Bold" }]}
+              >
+                Continue
+              </Text>
+            )}
           </LinearGradient>
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -201,5 +260,8 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 20,
     fontWeight: "bold",
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
 });

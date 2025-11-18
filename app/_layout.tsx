@@ -35,12 +35,15 @@ export default function RootLayout() {
           {/* Root Screens */}
           <Stack.Screen name="index" />
           <Stack.Screen name="onboarding" />
-          <Stack.Screen name="phone-number" />
-          <Stack.Screen name="otp" />
-          <Stack.Screen name="role-selection" />
-          <Stack.Screen name="profile-info" />
-          <Stack.Screen name="driver-profile" />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+          {/* Welcoming Screen Pages */}
+          <Stack.Screen name="Welcoming_screen/verify-num" />
+          <Stack.Screen name="Welcoming_screen/otp" />
+          <Stack.Screen name="Welcoming_screen/role-selection" />
+          <Stack.Screen name="Welcoming_screen/profile-info" />
+          <Stack.Screen name="Welcoming_screen/driver-profile" />
+          <Stack.Screen name="Welcoming_screen/onboarding" />
 
           {/* Family Screens */}
           <Stack.Screen name="Family/schedule_page" />

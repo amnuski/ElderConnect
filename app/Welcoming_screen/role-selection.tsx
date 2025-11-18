@@ -110,9 +110,15 @@ export default function RoleSelectionScreen() {
 
   const handleContinue = () => {
     if (selectedRole === "elder" || selectedRole === "family") {
-      router.push("/Welcoming_screen/profile-info");
+      router.push({
+        pathname: "/Welcoming_screen/profile-info",
+        params: { role: selectedRole },
+      });
     } else if (selectedRole === "driver") {
-      router.push("/Welcoming_screen/driver-profile");
+      router.push({
+        pathname: "/Welcoming_screen/driver-profile",
+        params: { role: selectedRole },
+      });
     }
   };
 

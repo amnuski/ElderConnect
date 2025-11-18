@@ -1,25 +1,103 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, SafeAreaView, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, SafeAreaView, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import { apiPut, apiGet } from '@/services/api';
 import { useFonts, ArimaMadurai_400Regular, ArimaMadurai_700Bold } from '@expo-google-fonts/arima-madurai';
 
 export default function EditProfileScreen() {
-  const [name, setName] = useState('Murukaiya Rajah');
-  const [phone, setPhone] = useState('07712345690');
-  const [address, setAddress] = useState('Kovil Road, Jaffna');
-  const [profileImage, setProfileImage] = useState(require('../../assets/images/elder.png'));
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [profileImage, setProfileImage] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [user, setUser] = useState(null);
 
   let [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
 
-  if (!fontsLoaded) return null;
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        setLoading(true);
+        // Try to get from AsyncStorage first
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          const userData = JSON.parse(userStr);
+          setUser(userData);
+          setName(userData.firstName || '');
+          setPhone(userData.phoneNumber || '');
+          setAddress(userData.address || '');
+          if (userData.profileImage) {
+            setProfileImage({ uri: userData.profileImage });
+          }
+        }
+        
+        // Also fetch latest from API
+        const response = await apiGet('/users/me');
+        if (response.user) {
+          setUser(response.user);
+          setName(response.user.firstName || '');
+          setPhone(response.user.phoneNumber || '');
+          setAddress(response.user.address || '');
+          if (response.user.profileImage) {
+            setProfileImage({ uri: response.user.profileImage });
+          }
+          await AsyncStorage.setItem('user', JSON.stringify(response.user));
+        }
+      } catch (error) {
+        console.error('Error loading user:', error);
+        Alert.alert("Error", "Failed to load profile");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadUser();
+  }, []);
 
-  const handleSave = () => {
-    alert('Profile Saved!');
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EAF3E9' }}>
+        <ActivityIndicator size="large" color="#04302B" />
+      </View>
+    );
+  }
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      Alert.alert("Error", "Name is required");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const updateData = {
+        firstName: name.trim(),
+        address: address.trim(),
+      };
+      
+      if (profileImage && profileImage.uri) {
+        updateData.profileImage = profileImage.uri;
+      }
+
+      const response = await apiPut('/users/me', updateData);
+      
+      if (response.user) {
+        await AsyncStorage.setItem('user', JSON.stringify(response.user));
+        setUser(response.user);
+        Alert.alert("Success", "Profile updated successfully!");
+      }
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      Alert.alert("Error", error.message || "Failed to save profile");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const pickImage = async () => {
@@ -60,7 +138,10 @@ export default function EditProfileScreen() {
         {/* Profile Image */}
         <View style={styles.profileImageContainer}>
           <View style={styles.profileImageWrapper}>
-            <Image source={profileImage} style={styles.profileImage} />
+            <Image 
+              source={profileImage || require('../../assets/images/elder.png')} 
+              style={styles.profileImage} 
+            />
             <TouchableOpacity style={styles.cameraIcon} onPress={pickImage}>
               <Ionicons name="camera" size={20} color="#fff" />
             </TouchableOpacity>
@@ -73,7 +154,12 @@ export default function EditProfileScreen() {
           <TextInput style={styles.input} value={name} onChangeText={setName} />
 
           <Text style={styles.label}>Phone Number</Text>
-          <TextInput style={styles.input} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+          <TextInput 
+            style={[styles.input, styles.disabledInput]} 
+            value={phone} 
+            editable={false}
+            placeholderTextColor="#999"
+          />
 
           <Text style={styles.label}>Address</Text>
           <TextInput style={styles.input} value={address} onChangeText={setAddress} />
@@ -81,8 +167,16 @@ export default function EditProfileScreen() {
 
         {/* Save Button */}
         <View style={styles.saveButtonContainer}>
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveButtonText}>Save</Text>
+          <TouchableOpacity 
+            style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
+            onPress={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.saveButtonText}>Save</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -125,5 +219,7 @@ const styles = StyleSheet.create({
   },
   saveButtonContainer: { paddingHorizontal: 24, marginTop: 24, marginBottom: 30 },
   saveButton: { backgroundColor: '#04302B', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  saveButtonDisabled: { opacity: 0.6 },
   saveButtonText: { color: '#fff', fontSize: 16, fontFamily: 'ArimaMadurai_700Bold' },
+  disabledInput: { backgroundColor: '#f0f0f0', color: '#666' },
 });

@@ -1,5 +1,5 @@
 // app/Call/ContactList.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,9 +12,12 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { apiGet, apiPost, apiDelete } from "@/services/api";
 import {
   useFonts,
   ArimaMadurai_400Regular,
@@ -26,15 +29,18 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+interface Contact {
+  _id: string;
+  name: string;
+  phone: string;
+  relation?: string;
+}
+
 export default function ContactList() {
   const router = useRouter();
 
-  const [contacts, setContacts] = useState([
-    { id: "1", name: "Raja Driver", phone: "+94771234567" },
-    { id: "2", name: "Kamala", phone: "+94776543210" },
-    { id: "3", name: "Vimal", phone: "+94770111222" },
-  ]);
-
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -44,29 +50,77 @@ export default function ContactList() {
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
+
+  useEffect(() => {
+    fetchContacts();
+  }, []);
+
+  const fetchContacts = async () => {
+    try {
+      setLoading(true);
+      const response = await apiGet<{ contacts: Contact[] }>('/contacts');
+      setContacts(response.contacts || []);
+    } catch (error: any) {
+      console.error('Error fetching contacts:', error);
+      Alert.alert("Error", error.message || "Failed to load contacts");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!fontsLoaded) return null;
 
   const makeCall = (phone: string) => {
     Linking.openURL(`tel:${phone}`);
   };
 
-  const addContact = () => {
-    if (!newName.trim() || !newPhone.trim()) return;
-    const newContact = {
-      id: Date.now().toString(),
-      name: newName,
-      phone: newPhone,
-    };
-    setContacts([...contacts, newContact]);
-    setNewName("");
-    setNewPhone("");
-    setModalVisible(false);
+  const addContact = async () => {
+    if (!newName.trim() || !newPhone.trim()) {
+      Alert.alert("Error", "Please fill all fields");
+      return;
+    }
+
+    try {
+      await apiPost('/contacts', {
+        name: newName.trim(),
+        phone: newPhone.trim(),
+        relation: 'other',
+      });
+      
+      await fetchContacts();
+      setNewName("");
+      setNewPhone("");
+      setModalVisible(false);
+      Alert.alert("Success", "Contact added successfully!");
+    } catch (error: any) {
+      console.error('Error adding contact:', error);
+      Alert.alert("Error", error.message || "Failed to add contact");
+    }
   };
 
-  const deleteContact = (id: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setContacts(contacts.filter((c) => c.id !== id));
-    setSelectedId(null);
+  const deleteContact = async (id: string) => {
+    Alert.alert(
+      "Delete Contact",
+      "Are you sure you want to delete this contact?",
+      [
+        { text: "Cancel", style: "cancel", onPress: () => setSelectedId(null) },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await apiDelete(`/contacts/${id}`);
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setContacts(contacts.filter((c) => c._id !== id));
+              setSelectedId(null);
+            } catch (error: any) {
+              console.error('Error deleting contact:', error);
+              Alert.alert("Error", error.message || "Failed to delete contact");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleLongPress = (id: string) => {
@@ -85,33 +139,47 @@ export default function ContactList() {
       </View>
 
       {/* Contact List */}
-      <FlatList
-        data={contacts}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.contactCard,
-              selectedId === item.id && { backgroundColor: "#FDECEC" },
-            ]}
-            onPress={() => makeCall(item.phone)}
-            onLongPress={() => handleLongPress(item.id)}
-          >
-            <View>
-              <Text style={styles.contactName}>{item.name}</Text>
-              <Text style={styles.contactNumber}>{item.phone}</Text>
-            </View>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0A3D2E" />
+        </View>
+      ) : (
+        <FlatList
+          data={contacts}
+          keyExtractor={(item) => item._id}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[
+                styles.contactCard,
+                selectedId === item._id && { backgroundColor: "#FDECEC" },
+              ]}
+              onPress={() => makeCall(item.phone)}
+              onLongPress={() => handleLongPress(item._id)}
+            >
+              <View>
+                <Text style={styles.contactName}>{item.name}</Text>
+                <Text style={styles.contactNumber}>{item.phone}</Text>
+                {item.relation && (
+                  <Text style={styles.contactRelation}>{item.relation}</Text>
+                )}
+              </View>
 
-            {selectedId === item.id ? (
-              <TouchableOpacity onPress={() => deleteContact(item.id)}>
-                <Ionicons name="trash" size={24} color="#D10000" />
-              </TouchableOpacity>
-            ) : (
-              <Ionicons name="call-outline" size={24} color="#0A3D2E" />
-            )}
-          </TouchableOpacity>
-        )}
-      />
+              {selectedId === item._id ? (
+                <TouchableOpacity onPress={() => deleteContact(item._id)}>
+                  <Ionicons name="trash" size={24} color="#D10000" />
+                </TouchableOpacity>
+              ) : (
+                <Ionicons name="call-outline" size={24} color="#0A3D2E" />
+              )}
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No contacts added yet</Text>
+            </View>
+          }
+        />
+      )}
 
       {/* Floating Add Button */}
       <TouchableOpacity
@@ -265,5 +333,26 @@ const styles = StyleSheet.create({
   addText: {
     color: "#fff",
     fontFamily: "ArimaMadurai_700Bold",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  emptyContainer: {
+    paddingVertical: 40,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontFamily: "ArimaMadurai_400Regular",
+    fontSize: 14,
+    color: "#666",
+  },
+  contactRelation: {
+    fontSize: 12,
+    color: "#888",
+    fontFamily: "ArimaMadurai_400Regular",
+    marginTop: 2,
   },
 });

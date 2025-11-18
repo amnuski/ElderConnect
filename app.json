@@ -45,6 +45,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "DEV_API_PORT": "5000",
+      "DEV_API_IP": "http://127.0.0.1:5000",
+      "TUNNEL_URL": "https://vesical-superloyally-reese.ngrok-free.dev"
     }
   }
 }

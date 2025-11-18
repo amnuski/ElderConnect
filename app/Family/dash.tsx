@@ -2,7 +2,7 @@
 import { ArimaMadurai_400Regular, ArimaMadurai_700Bold, useFonts } from "@expo-google-fonts/arima-madurai";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dimensions,
   Image,
@@ -13,30 +13,149 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Footer from "../Footer/footer";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
+import { apiGet, apiDelete } from "@/services/api";
+import scheduleEventEmitter from "./scheduleEventEmitter";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+
+interface Activity {
+  _id: string;
+  title: string;
+  time: string;
+  date: string;
+  fromLocation?: string;
+  toLocation?: string;
+}
 
 export default function Dashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("home");
-  const [selectedActivity, setSelectedActivity] = useState<number | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   let [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
-  if (!fontsLoaded) return null;
 
-  const activities = [
-    { id: 1, title: "Go to Temple", time: "8.00 AM" },
-    { id: 2, title: "Doctor Appointment", time: "2.00 PM" },
-    { id: 3, title: "Grocery Shopping", time: "4.00 PM" },
-    { id: 4, title: "Family Visit", time: "6.00 PM" },
-  ];
+  // Load user data
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          setUser(JSON.parse(userStr));
+        }
+      } catch (error) {
+        console.error('Error loading user:', error);
+      }
+    };
+    loadUser();
+  }, []);
+
+  // Fetch schedules from backend
+  const fetchSchedules = async () => {
+    try {
+      if (!user) return;
+
+      const response = await apiGet<{ schedules: any[] }>('/schedules');
+      
+      // Filter today's schedules - normalize dates for comparison
+      const today = new Date();
+      const todayYear = today.getFullYear();
+      const todayMonth = today.getMonth();
+      const todayDay = today.getDate();
+      
+      const todaySchedules = (response.schedules || [])
+        .filter((schedule: any) => {
+          if (!schedule.date) return false;
+          
+          // Handle both ISO string and Date object
+          const scheduleDate = new Date(schedule.date);
+          const scheduleYear = scheduleDate.getFullYear();
+          const scheduleMonth = scheduleDate.getMonth();
+          const scheduleDay = scheduleDate.getDate();
+          
+          // Compare year, month, and day
+          return (
+            scheduleYear === todayYear &&
+            scheduleMonth === todayMonth &&
+            scheduleDay === todayDay
+          );
+        })
+        .map((schedule: any) => ({
+          _id: schedule._id,
+          title: schedule.title,
+          time: schedule.time,
+          date: schedule.date,
+          fromLocation: schedule.fromLocation,
+          toLocation: schedule.toLocation,
+        }))
+        .sort((a, b) => {
+          // Sort by time - handle both 12-hour and 24-hour format
+          const timeA = a.time.toLowerCase().replace(/\s*(am|pm)/, '');
+          const timeB = b.time.toLowerCase().replace(/\s*(am|pm)/, '');
+          return timeA.localeCompare(timeB);
+        });
+
+      setActivities(todaySchedules);
+    } catch (error: any) {
+      console.error('Error fetching schedules:', error);
+      Alert.alert("Error", "Failed to load activities. Please try again.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Load schedules on mount and when user is loaded
+  useEffect(() => {
+    if (user) {
+      fetchSchedules();
+    }
+  }, [user]);
+
+  // Refresh schedules when screen comes into focus (e.g., when returning from add_schedule)
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        fetchSchedules();
+      }
+    }, [user])
+  );
+
+  // Listen for new events
+  useEffect(() => {
+    if (!user) return;
+    
+    const subscription = scheduleEventEmitter.addListener(
+      "eventAdded",
+      () => {
+        // Refresh schedules when new event is added
+        fetchSchedules();
+      }
+    );
+    return () => subscription.remove();
+  }, [user]);
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#04302B" />
+      </View>
+    );
+  }
 
   const quickActions = [
     { icon: "call", route: "/Call/DriverCall" },
@@ -46,18 +165,50 @@ export default function Dashboard() {
 
   const handleTabPress = (tab: string) => setActiveTab(tab);
 
-  const handleActivityPress = (activityId: number) => {
+  const handleActivityPress = (activityId: string) => {
     setSelectedActivity(selectedActivity === activityId ? null : activityId);
   };
 
-  const handleEditActivity = (activityId: number) => {
-    console.log("Edit activity:", activityId);
+  const handleEditActivity = (activity: Activity) => {
+    const activityDate = new Date(activity.date);
+    router.push({
+      pathname: "/Family/add_schedule",
+      params: {
+        selectedDate: activityDate.toISOString(),
+        editMode: "true",
+        scheduleId: activity._id,
+        title: activity.title,
+        time: activity.time,
+        fromLocation: activity.fromLocation || "",
+        toLocation: activity.toLocation || "",
+      },
+    });
     setSelectedActivity(null);
   };
 
-  const handleDeleteActivity = (activityId: number) => {
-    console.log("Delete activity:", activityId);
-    setSelectedActivity(null);
+  const handleDeleteActivity = async (activityId: string) => {
+    Alert.alert(
+      "Delete Activity",
+      "Are you sure you want to delete this activity?",
+      [
+        { text: "Cancel", style: "cancel", onPress: () => setSelectedActivity(null) },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await apiDelete(`/schedules/${activityId}`);
+              // Remove from local state
+              setActivities(prev => prev.filter(a => a._id !== activityId));
+              setSelectedActivity(null);
+            } catch (error: any) {
+              console.error('Error deleting schedule:', error);
+              Alert.alert("Error", "Failed to delete activity. Please try again.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleScroll = (event: any) => {
@@ -82,13 +233,16 @@ export default function Dashboard() {
           <View style={styles.profileSection}>
             <Image
               source={{
-                uri: "https://www.maplewoodseniorliving.com/wp-content/uploads/2024/01/shutterstock_1926698987-Low-Res-scaled.jpg",
+                uri: user?.profileImage || "https://www.maplewoodseniorliving.com/wp-content/uploads/2024/01/shutterstock_1926698987-Low-Res-scaled.jpg",
               }}
               style={styles.profileImage}
             />
             <View>
               <Text style={styles.welcomeText}>Welcome</Text>
-              <Text style={styles.userName}>Anne !</Text>
+              <Text style={styles.userName}>{user?.firstName || 'User'} !</Text>
+              {user?.phoneNumber && (
+                <Text style={styles.userPhone}>{user.phoneNumber}</Text>
+              )}
             </View>
           </View>
           <TouchableOpacity style={styles.notificationButton}>
@@ -100,65 +254,102 @@ export default function Dashboard() {
           style={styles.content}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.contentContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => {
+              setRefreshing(true);
+              fetchSchedules();
+            }} />
+          }
         >
           {/* Today Activity */}
           <View style={styles.activitySection}>
             <Text style={styles.sectionTitle1}>Today Activity</Text>
-            <Text style={styles.dateText}>July 12, 2025</Text>
+            <Text style={styles.dateText}>
+              {new Date().toLocaleDateString("en-US", {
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </Text>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.activityCardsContainer}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-            >
-              {activities.map((activity) => (
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#04302B" />
+              </View>
+            ) : activities.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No activities scheduled for today</Text>
                 <TouchableOpacity
-                  key={activity.id}
-                  style={[
-                    styles.activityCard,
-                    selectedActivity === activity.id && styles.selectedActivityCard,
-                  ]}
-                  onPress={() => handleActivityPress(activity.id)}
-                  activeOpacity={0.8}
+                  style={styles.addActivityButton}
+                  onPress={() => router.push("/Family/add_schedule")}
                 >
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityTitle}>{activity.title}</Text>
-                    <Text style={styles.activityTime}>{activity.time}</Text>
-                  </View>
-                  {selectedActivity === activity.id && (
-                    <View style={styles.editActions}>
-                      <TouchableOpacity
-                        style={styles.editButton}
-                        onPress={() => handleEditActivity(activity.id)}
-                      >
-                        <Ionicons name="create" size={16} color="#2E7D32" />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={() => handleDeleteActivity(activity.id)}
-                      >
-                        <Ionicons name="trash" size={16} color="#2E7D32" />
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  <Text style={styles.addActivityText}>Add Activity</Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              </View>
+            ) : (
+              <>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.activityCardsContainer}
+                  onScroll={handleScroll}
+                  scrollEventThrottle={16}
+                >
+                  {activities.map((activity) => (
+                    <TouchableOpacity
+                      key={activity._id}
+                      style={[
+                        styles.activityCard,
+                        selectedActivity === activity._id && styles.selectedActivityCard,
+                      ]}
+                      onPress={() => handleActivityPress(activity._id)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.activityContent}>
+                        <Text style={styles.activityTitle}>{activity.title}</Text>
+                        <Text style={styles.activityTime}>{activity.time}</Text>
+                        {(activity.fromLocation || activity.toLocation) && (
+                          <Text style={styles.activityLocation} numberOfLines={1}>
+                            {activity.fromLocation} → {activity.toLocation}
+                          </Text>
+                        )}
+                      </View>
+                      {selectedActivity === activity._id && (
+                        <View style={styles.editActions}>
+                          <TouchableOpacity
+                            style={styles.editButton}
+                            onPress={() => handleEditActivity(activity)}
+                          >
+                            <Ionicons name="create" size={16} color="#2E7D32" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.deleteButton}
+                            onPress={() => handleDeleteActivity(activity._id)}
+                          >
+                            <Ionicons name="trash" size={16} color="#2E7D32" />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
 
-            {/* Scroll Indicators */}
-            <View style={styles.scrollIndicators}>
-              {activities.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.indicator,
-                    activeIndex === index && styles.activeIndicator,
-                  ]}
-                />
-              ))}
-            </View>
+                {/* Scroll Indicators */}
+                {activities.length > 1 && (
+                  <View style={styles.scrollIndicators}>
+                    {activities.map((_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.indicator,
+                          activeIndex === index && styles.activeIndicator,
+                        ]}
+                      />
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
           </View>
 
           {/* Track Ride */}
@@ -217,6 +408,7 @@ const styles = StyleSheet.create({
   },
   welcomeText: { fontFamily: "ArimaMadurai_400Regular", fontSize: screenWidth * 0.045, color: "#000" },
   userName: { fontFamily: "ArimaMadurai_700Bold", fontSize: screenWidth * 0.06, color: "#000" },
+  userPhone: { fontFamily: "ArimaMadurai_400Regular", fontSize: screenWidth * 0.035, color: "#666", marginTop: 2 },
   notificationButton: {
     width: screenWidth * 0.12,
     height: screenWidth * 0.12,
@@ -287,4 +479,35 @@ const styles = StyleSheet.create({
   additionalContent: { marginTop: screenHeight * 0.01, padding: screenWidth * 0.05, backgroundColor: "#E8F5E8", borderRadius: screenWidth * 0.03 },
   additionalTitle: { fontFamily: "ArimaMadurai_700Bold", fontSize: screenWidth * 0.05, color: "#04302B", marginBottom: screenHeight * 0.01 },
   additionalText: { fontFamily: "ArimaMadurai_400Regular", fontSize: screenWidth * 0.04, color: "#333" },
+  loadingContainer: {
+    paddingVertical: screenHeight * 0.05,
+    alignItems: "center",
+  },
+  emptyContainer: {
+    paddingVertical: screenHeight * 0.05,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontFamily: "ArimaMadurai_400Regular",
+    fontSize: screenWidth * 0.04,
+    color: "#666",
+    marginBottom: screenHeight * 0.02,
+  },
+  addActivityButton: {
+    backgroundColor: "#04302B",
+    paddingVertical: screenHeight * 0.015,
+    paddingHorizontal: screenWidth * 0.08,
+    borderRadius: screenWidth * 0.03,
+  },
+  addActivityText: {
+    fontFamily: "ArimaMadurai_700Bold",
+    color: "#fff",
+    fontSize: screenWidth * 0.04,
+  },
+  activityLocation: {
+    fontFamily: "ArimaMadurai_400Regular",
+    fontSize: screenWidth * 0.035,
+    color: "#666",
+    marginTop: screenHeight * 0.005,
+  },
 });

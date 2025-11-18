@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   Alert,
   Animated,
@@ -15,13 +15,19 @@ import {
   TextInput,
   View,
   ListRenderItem,
+  ActivityIndicator,
+  Linking,
+  RefreshControl,
 } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
+import { apiGet, apiPost, apiPut, apiDelete } from "@/services/api";
 
 interface Contact {
-  id: number;
+  _id: string;
   name: string;
   phone: string;
+  relation?: string;
+  isEmergency?: boolean;
 }
 
 interface AnimatedIconProps {
@@ -31,16 +37,33 @@ interface AnimatedIconProps {
   onPress?: () => void;
 }
 
-export default function DriverCall() {
-  const [contacts, setContacts] = useState<Contact[]>([
-    { id: 1, name: "Raja", phone: "0771234567" },
-    { id: 2, name: "Hiruni", phone: "0719876543" },
-  ]);
-
+export default function CareTakerCall() {
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Fetch contacts from backend
+  const fetchContacts = async () => {
+    try {
+      const response = await apiGet<{ contacts: Contact[] }>('/contacts');
+      setContacts(response.contacts || []);
+    } catch (error: any) {
+      console.error('Error fetching contacts:', error);
+      Alert.alert("Error", "Failed to load contacts. Please try again.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchContacts();
+  }, []);
 
   const AnimatedIcon: React.FC<AnimatedIconProps> = ({
     name,
@@ -81,29 +104,38 @@ export default function DriverCall() {
     setModalVisible(true);
   };
 
-  const saveContact = () => {
+  const saveContact = async () => {
     if (!nameInput.trim() || !phoneInput.trim()) {
       Alert.alert("Validation", "Please enter name and phone number.");
       return;
     }
-    if (editingContact) {
-      setContacts((prev) =>
-        prev.map((c) =>
-          c.id === editingContact.id
-            ? { ...c, name: nameInput.trim(), phone: phoneInput.trim() }
-            : c
-        )
-      );
-      Alert.alert("Updated", "Contact updated successfully!");
-    } else {
-      const newId = contacts.length ? Math.max(...contacts.map((c) => c.id)) + 1 : 1;
-      setContacts((prev) => [
-        { id: newId, name: nameInput.trim(), phone: phoneInput.trim() },
-        ...prev,
-      ]);
-      Alert.alert("Added", "New contact added successfully!");
+
+    setSaving(true);
+
+    try {
+      if (editingContact) {
+        await apiPut(`/contacts/${editingContact._id}`, {
+          name: nameInput.trim(),
+          phone: phoneInput.trim(),
+        });
+        Alert.alert("Updated", "Contact updated successfully!");
+      } else {
+        await apiPost('/contacts', {
+          name: nameInput.trim(),
+          phone: phoneInput.trim(),
+          relation: 'caretaker',
+        });
+        Alert.alert("Added", "New contact added successfully!");
+      }
+
+      setModalVisible(false);
+      fetchContacts();
+    } catch (error: any) {
+      console.error('Error saving contact:', error);
+      Alert.alert("Error", error.message || "Failed to save contact. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    setModalVisible(false);
   };
 
   const deleteContact = (contact: Contact) => {
@@ -115,13 +147,24 @@ export default function DriverCall() {
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => {
-            setContacts((prev) => prev.filter((c) => c.id !== contact.id));
-            Alert.alert("Deleted", "Contact removed successfully!");
+          onPress: async () => {
+            try {
+              await apiDelete(`/contacts/${contact._id}`);
+              setContacts((prev) => prev.filter((c) => c._id !== contact._id));
+              Alert.alert("Deleted", "Contact removed successfully!");
+            } catch (error: any) {
+              console.error('Error deleting contact:', error);
+              Alert.alert("Error", "Failed to delete contact. Please try again.");
+            }
           },
         },
       ]
     );
+  };
+
+  const makeCall = (phone: string) => {
+    const cleanPhone = phone.replace(/[^\d+]/g, '');
+    Linking.openURL(`tel:${cleanPhone}`);
   };
 
   const renderRightActions = (contact: Contact) => (
@@ -149,12 +192,12 @@ export default function DriverCall() {
           <AnimatedIcon
             name="call-outline"
             size={26}
-            onPress={() =>
+            onPress={() => {
               router.push({
                 pathname: "/Call/callattend",
-                params: { name: item.name, phone: item.phone },
-              })
-            }
+                params: { name: item.name, phone: item.phone, callType: 'outgoing' },
+              });
+            }}
           />
           <AnimatedIcon
             name="videocam-outline"
@@ -190,20 +233,32 @@ export default function DriverCall() {
           />
         </View>
 
-        <FlatList
-          data={contacts}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderContact}
-          contentContainerStyle={{ paddingBottom: 160 }}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          ListEmptyComponent={
-            <View style={{ marginTop: 40, alignItems: "center" }}>
-              <Text style={{ color: "#0a3d2e", opacity: 0.7 }}>
-                No contacts — tap + to add
-              </Text>
-            </View>
-          }
-        />
+        {loading ? (
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ActivityIndicator size="large" color="#0a3d2e" />
+          </View>
+        ) : (
+          <FlatList
+            data={contacts}
+            keyExtractor={(item) => item._id}
+            renderItem={renderContact}
+            contentContainerStyle={{ paddingBottom: 160 }}
+            ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => {
+                setRefreshing(true);
+                fetchContacts();
+              }} />
+            }
+            ListEmptyComponent={
+              <View style={{ marginTop: 40, alignItems: "center" }}>
+                <Text style={{ color: "#0a3d2e", opacity: 0.7 }}>
+                  No contacts — tap + to add
+                </Text>
+              </View>
+            }
+          />
+        )}
 
         <Pressable style={styles.floatingBtn} onPress={openAddModal}>
           <Ionicons name="add" size={30} color="white" />
@@ -248,11 +303,16 @@ export default function DriverCall() {
                 </Pressable>
                 <Pressable
                   onPress={saveContact}
-                  style={[styles.modalBtn, { marginLeft: 10, backgroundColor: "#0a3d2e" }]}
+                  disabled={saving}
+                  style={[styles.modalBtn, { marginLeft: 10, backgroundColor: "#0a3d2e", opacity: saving ? 0.6 : 1 }]}
                 >
-                  <Text style={{ color: "white" }}>
-                    {editingContact ? "Save" : "Add"}
-                  </Text>
+                  {saving ? (
+                    <ActivityIndicator color="white" size="small" />
+                  ) : (
+                    <Text style={{ color: "white" }}>
+                      {editingContact ? "Save" : "Add"}
+                    </Text>
+                  )}
                 </Pressable>
               </View>
             </View>

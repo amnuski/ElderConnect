@@ -40,7 +40,7 @@ export default function PhoneNumberScreen() {
 
   if (!fontsLoaded) return null;
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     if (!phoneNumber || phoneNumber.length < 9) {
       Alert.alert("Error", "Please enter a valid phone number");
       return;
@@ -51,17 +51,37 @@ export default function PhoneNumberScreen() {
 
     setLoading(true);
 
-    // Simulate sending OTP
-    setTimeout(() => {
+    try {
+      // Import API service
+      const { apiPost } = await import('@/services/api');
+      
+      // Send OTP to backend
+      const response = await apiPost('/auth/send-otp', {
+        phoneNumber: fullNumber,
+      });
+
       setLoading(false);
-      Alert.alert("Code Sent", `OTP sent to ${fullNumber}`);
+      
+      // Show success message with dev OTP if available
+      const message = response.devOTP 
+        ? `OTP sent! Dev OTP: ${response.devOTP}`
+        : `OTP sent to ${fullNumber}`;
+      
+      Alert.alert("Code Sent", message);
 
       // Navigate to OTP screen with phone number as param
       router.push({
         pathname: "/Welcoming_screen/otp",
         params: { phone: fullNumber },
       });
-    }, 1000);
+    } catch (error: any) {
+      setLoading(false);
+      console.error('OTP send error:', error);
+      Alert.alert(
+        "Error", 
+        error.message || "Failed to send OTP. Please try again."
+      );
+    }
   };
 
   return (

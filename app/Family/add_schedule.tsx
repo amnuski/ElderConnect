@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,35 +12,74 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import scheduleEventEmitter from "./scheduleEventEmitter";
 import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
   useFonts,
 } from "@expo-google-fonts/arima-madurai";
+import { apiPost, apiPut, apiGet } from "@/services/api";
 
 const THEME_COLOR = "#04302B";
 
 const AddSchedule = () => {
   const router = useRouter();
-  const { selectedDate } = useLocalSearchParams();
+  const { selectedDate, editMode, scheduleId, title: initialTitle, time: initialTime, fromLocation: initialFromLocation, toLocation: initialToLocation } = useLocalSearchParams();
 
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
 
-  const [title, setTitle] = useState("");
-  const [time, setTime] = useState("");
+  const [title, setTitle] = useState(initialTitle as string || "");
+  const [time, setTime] = useState(initialTime as string || "");
   const [driver, setDriver] = useState("");
-  const [fromLocation, setFromLocation] = useState("");
-  const [toLocation, setToLocation] = useState("");
+  const [fromLocation, setFromLocation] = useState(initialFromLocation as string || "");
+  const [toLocation, setToLocation] = useState(initialToLocation as string || "");
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const isEditMode = editMode === "true" && scheduleId;
 
   const [date, setDate] = useState(
     selectedDate ? new Date(selectedDate as string) : new Date()
   );
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+
+  // Load user data and schedule data if editing
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          setUser(JSON.parse(userStr));
+        }
+
+        // If editing, load the schedule data
+        if (isEditMode && scheduleId) {
+          try {
+            const response = await apiGet<{ schedules: any[] }>('/schedules');
+            const schedule = response.schedules.find((s: any) => s._id === scheduleId);
+            if (schedule) {
+              setTitle(schedule.title || "");
+              setTime(schedule.time || "");
+              setFromLocation(schedule.fromLocation || "");
+              setToLocation(schedule.toLocation || "");
+              if (schedule.date) {
+                setDate(new Date(schedule.date));
+              }
+            }
+          } catch (error) {
+            console.error('Error loading schedule:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+      }
+    };
+    loadData();
+  }, [isEditMode, scheduleId]);
 
   if (!fontsLoaded) {
     return (
@@ -66,22 +105,85 @@ const AddSchedule = () => {
   };
 
   // ✅ Save event
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!title || !time || !fromLocation || !toLocation) {
       Alert.alert("Error", "Please fill all required fields!");
       return;
     }
 
-    scheduleEventEmitter.emit("eventAdded", {
-      title,
-      time,
-      date: date.toDateString(),
-      driver,
-      location: `${fromLocation} → ${toLocation}`,
-    });
+    if (!user) {
+      Alert.alert("Error", "User not found. Please login again.");
+      return;
+    }
 
-    Alert.alert("Success", "Event saved successfully!");
-    router.back();
+    setLoading(true);
+
+    try {
+      // Format date for backend (YYYY-MM-DD)
+      const formattedDate = date.toISOString().split('T')[0];
+      
+      // Determine elderId and familyId based on user role
+      let elderId = user._id;
+      let familyId = user._id;
+      
+      // If user is family member, we need to get the elder they're associated with
+      // For now, using the same user ID (you can update this based on your family relationship logic)
+      if (user.role === 'family') {
+        // In a real app, you'd get the elder ID from family relationships
+        // For now, using the same ID (you may need to add a family relationship model)
+        elderId = user._id;
+        familyId = user._id;
+      } else if (user.role === 'elder') {
+        // Elder creating their own schedule
+        elderId = user._id;
+        // You might want to get familyId from family relationships
+        familyId = user._id;
+      }
+
+      // Save or update to backend
+      if (isEditMode && scheduleId) {
+        // Update existing schedule
+        await apiPut(`/schedules/${scheduleId}`, {
+          title,
+          date: formattedDate,
+          time,
+          fromLocation,
+          toLocation,
+        });
+        Alert.alert("Success", "Event updated successfully!");
+      } else {
+        // Create new schedule
+        await apiPost('/schedules', {
+          elderId,
+          familyId,
+          title,
+          date: formattedDate,
+          time,
+          fromLocation,
+          toLocation,
+        });
+        Alert.alert("Success", "Event saved successfully!");
+      }
+
+      // Emit event for local updates
+      scheduleEventEmitter.emit("eventAdded", {
+        title,
+        time,
+        date: date.toDateString(),
+        driver,
+        location: `${fromLocation} → ${toLocation}`,
+      });
+
+      setLoading(false);
+      router.back();
+    } catch (error: any) {
+      setLoading(false);
+      console.error('Error saving schedule:', error);
+      Alert.alert(
+        "Error",
+        error.message || "Failed to save event. Please try again."
+      );
+    }
   };
 
   // ✅ Format time
@@ -101,7 +203,7 @@ const AddSchedule = () => {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={28} color={THEME_COLOR} />
         </TouchableOpacity>
-        <Text style={styles.header}>Add Event</Text>
+        <Text style={styles.header}>{isEditMode ? "Edit Event" : "Add Event"}</Text>
       </View>
 
       {/* 📅 Date Picker */}
@@ -183,8 +285,16 @@ const AddSchedule = () => {
         placeholderTextColor="#7b7b7b"
       />
 
-      <TouchableOpacity style={styles.addButton} onPress={handleAdd}>
-        <Text style={styles.addText}>Save</Text>
+      <TouchableOpacity 
+        style={[styles.addButton, loading && styles.addButtonDisabled]} 
+        onPress={handleAdd}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="white" />
+        ) : (
+          <Text style={styles.addText}>Save</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -246,6 +356,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 15,
+  },
+  addButtonDisabled: {
+    opacity: 0.6,
   },
 });
  

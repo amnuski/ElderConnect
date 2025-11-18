@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   Alert,
   Animated,
@@ -13,6 +13,8 @@ import {
   View,
   ListRenderItem,
   ActivityIndicator,
+  Linking,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,12 +25,15 @@ import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
 } from "@expo-google-fonts/arima-madurai";
+import { apiGet, apiPost, apiPut, apiDelete } from "@/services/api";
 
 // ✅ Contact type
 interface Contact {
-  id: number;
+  _id: string;
   name: string;
   phone: string;
+  relation?: string;
+  isEmergency?: boolean;
 }
 
 // ✅ AnimatedIcon props
@@ -40,21 +45,40 @@ interface AnimatedIconProps {
 }
 
 export default function DriverCall() {
-  const [contacts, setContacts] = useState<Contact[]>([
-    { id: 1, name: "Raja", phone: "0771234567" },
-    { id: 2, name: "Hiruni", phone: "0719876543" },
-  ]);
-
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // ✅ Load custom fonts
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
+
+  // Fetch contacts from backend
+  const fetchContacts = async () => {
+    try {
+      const response = await apiGet<{ contacts: Contact[] }>('/contacts');
+      setContacts(response.contacts || []);
+    } catch (error: any) {
+      console.error('Error fetching contacts:', error);
+      Alert.alert("Error", "Failed to load contacts. Please try again.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      fetchContacts();
+    }
+  }, [fontsLoaded]);
 
   // Show loading while fonts are loading
   if (!fontsLoaded) {
@@ -108,31 +132,38 @@ export default function DriverCall() {
   };
 
   // ✅ Save or update contact
-  const saveContact = () => {
+  const saveContact = async () => {
     if (!nameInput.trim() || !phoneInput.trim()) {
       Alert.alert("Validation", "Please enter name and phone number.");
       return;
     }
 
-    if (editingContact) {
-      setContacts((prev) =>
-        prev.map((c) =>
-          c.id === editingContact.id
-            ? { ...c, name: nameInput.trim(), phone: phoneInput.trim() }
-            : c
-        )
-      );
-      Alert.alert("Updated", "Contact updated successfully!");
-    } else {
-      const newId = contacts.length ? Math.max(...contacts.map((c) => c.id)) + 1 : 1;
-      setContacts((prev) => [
-        { id: newId, name: nameInput.trim(), phone: phoneInput.trim() },
-        ...prev,
-      ]);
-      Alert.alert("Added", "New contact added successfully!");
-    }
+    setSaving(true);
 
-    setModalVisible(false);
+    try {
+      if (editingContact) {
+        await apiPut(`/contacts/${editingContact._id}`, {
+          name: nameInput.trim(),
+          phone: phoneInput.trim(),
+        });
+        Alert.alert("Updated", "Contact updated successfully!");
+      } else {
+        await apiPost('/contacts', {
+          name: nameInput.trim(),
+          phone: phoneInput.trim(),
+          relation: 'driver',
+        });
+        Alert.alert("Added", "New contact added successfully!");
+      }
+
+      setModalVisible(false);
+      fetchContacts();
+    } catch (error: any) {
+      console.error('Error saving contact:', error);
+      Alert.alert("Error", error.message || "Failed to save contact. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ✅ Delete contact
@@ -145,13 +176,24 @@ export default function DriverCall() {
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => {
-            setContacts((prev) => prev.filter((c) => c.id !== contact.id));
-            Alert.alert("Deleted", "Contact removed successfully!");
+          onPress: async () => {
+            try {
+              await apiDelete(`/contacts/${contact._id}`);
+              setContacts((prev) => prev.filter((c) => c._id !== contact._id));
+              Alert.alert("Deleted", "Contact removed successfully!");
+            } catch (error: any) {
+              console.error('Error deleting contact:', error);
+              Alert.alert("Error", "Failed to delete contact. Please try again.");
+            }
           },
         },
       ]
     );
+  };
+
+  const makeCall = (phone: string) => {
+    const cleanPhone = phone.replace(/[^\d+]/g, '');
+    Linking.openURL(`tel:${cleanPhone}`);
   };
 
   const renderRightActions = (contact: Contact) => (
@@ -184,12 +226,12 @@ export default function DriverCall() {
           <AnimatedIcon
             name="call-outline"
             size={26}
-            onPress={() =>
+            onPress={() => {
               router.push({
                 pathname: "/Call/callattend",
-                params: { name: item.name, phone: item.phone },
-              })
-            }
+                params: { name: item.name, phone: item.phone, callType: 'outgoing' },
+              });
+            }}
           />
           <AnimatedIcon
             name="videocam-outline"
@@ -230,26 +272,38 @@ export default function DriverCall() {
         </View>
 
         {/* Contact List */}
-        <FlatList
-          data={contacts}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderContact}
-          contentContainerStyle={{ paddingBottom: 160 }}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          ListEmptyComponent={
-            <View style={{ marginTop: 40, alignItems: "center" }}>
-              <Text
-                style={{
-                  color: "#0a3d2e",
-                  opacity: 0.7,
-                  fontFamily: "ArimaMadurai_400Regular",
-                }}
-              >
-                No contacts — tap + to add
-              </Text>
-            </View>
-          }
-        />
+        {loading ? (
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ActivityIndicator size="large" color="#0a3d2e" />
+          </View>
+        ) : (
+          <FlatList
+            data={contacts}
+            keyExtractor={(item) => item._id}
+            renderItem={renderContact}
+            contentContainerStyle={{ paddingBottom: 160 }}
+            ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => {
+                setRefreshing(true);
+                fetchContacts();
+              }} />
+            }
+            ListEmptyComponent={
+              <View style={{ marginTop: 40, alignItems: "center" }}>
+                <Text
+                  style={{
+                    color: "#0a3d2e",
+                    opacity: 0.7,
+                    fontFamily: "ArimaMadurai_400Regular",
+                  }}
+                >
+                  No contacts — tap + to add
+                </Text>
+              </View>
+            }
+          />
+        )}
 
         {/* Floating Add Button */}
         <Pressable style={styles.floatingBtn} onPress={openAddModal}>
@@ -313,19 +367,24 @@ export default function DriverCall() {
                 </Pressable>
                 <Pressable
                   onPress={saveContact}
+                  disabled={saving}
                   style={[
                     styles.modalBtn,
-                    { marginLeft: 10, backgroundColor: "#0a3d2e" },
+                    { marginLeft: 10, backgroundColor: "#0a3d2e", opacity: saving ? 0.6 : 1 },
                   ]}
                 >
-                  <Text
-                    style={{
-                      color: "white",
-                      fontFamily: "ArimaMadurai_700Bold",
-                    }}
-                  >
-                    {editingContact ? "Save" : "Add"}
-                  </Text>
+                  {saving ? (
+                    <ActivityIndicator color="white" size="small" />
+                  ) : (
+                    <Text
+                      style={{
+                        color: "white",
+                        fontFamily: "ArimaMadurai_700Bold",
+                      }}
+                    >
+                      {editingContact ? "Save" : "Add"}
+                    </Text>
+                  )}
                 </Pressable>
               </View>
             </View>

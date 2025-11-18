@@ -1,5 +1,5 @@
 // app/otp.tsx
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,9 +9,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   useFonts,
   KaushanScript_400Regular,
@@ -20,10 +22,24 @@ import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
 } from "@expo-google-fonts/arima-madurai";
+import { apiPost } from "@/services/api";
+
+interface User {
+  _id: string;
+  phoneNumber: string;
+  firstName: string;
+  lastName?: string;
+  role?: string;
+  isVerified: boolean;
+}
 
 export default function OtpScreen() {
   const router = useRouter();
-  const [otp, setOtp] = useState(["", "", "", ""]);
+  const params = useLocalSearchParams();
+  const phoneNumber = params.phone as string;
+  
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]); // 6 digits OTP
+  const [loading, setLoading] = useState(false);
 
   // store references to each TextInput
   const inputs = useRef<Array<TextInput | null>>([]);
@@ -34,6 +50,13 @@ export default function OtpScreen() {
     ArimaMadurai_700Bold,
   });
 
+  useEffect(() => {
+    if (!phoneNumber) {
+      Alert.alert("Error", "Phone number is required");
+      router.back();
+    }
+  }, [phoneNumber]);
+
   if (!fontsLoaded) return null;
 
   const handleChange = (text: string, index: number) => {
@@ -41,19 +64,69 @@ export default function OtpScreen() {
     newOtp[index] = text;
     setOtp(newOtp);
 
-    if (text && index < 3) {
+    if (text && index < 5) {
       inputs.current[index + 1]?.focus(); // auto focus next
     }
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const code = otp.join("");
-    if (code.length === 4) {
-      Alert.alert("OTP Entered", code);
-      // Example success: navigate to home (update path as needed)
-      router.push("/Welcoming_screen/role-selection");
-    } else {
-      Alert.alert("Error", "Please enter all 4 digits.");
+    
+    if (code.length !== 6) {
+      Alert.alert("Error", "Please enter all 6 digits.");
+      return;
+    }
+
+    if (!phoneNumber) {
+      Alert.alert("Error", "Phone number is missing.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Verify OTP with backend
+      const response = await apiPost<{
+        accessToken: string;
+        refreshToken: string;
+        user: User;
+      }>('/auth/verify-otp', {
+        phoneNumber: phoneNumber,
+        otp: code,
+      });
+
+      // Store tokens in AsyncStorage
+      await AsyncStorage.setItem('accessToken', response.accessToken);
+      await AsyncStorage.setItem('refreshToken', response.refreshToken);
+      await AsyncStorage.setItem('user', JSON.stringify(response.user));
+
+      setLoading(false);
+
+      // Check if user has a role (existing account)
+      if (response.user.role) {
+        // Existing user - navigate to their dashboard based on role
+        switch (response.user.role) {
+          case 'elder':
+          case 'family':
+            router.replace('/Family/dash');
+            break;
+          case 'driver':
+            router.replace('/Driver/Driver-dash');
+            break;
+          default:
+            router.replace('/Welcoming_screen/role-selection');
+        }
+      } else {
+        // New user - navigate to role selection
+        router.replace('/Welcoming_screen/role-selection');
+      }
+    } catch (error: any) {
+      setLoading(false);
+      console.error('OTP verification error:', error);
+      Alert.alert(
+        "Verification Failed",
+        error.message || "Invalid OTP. Please try again."
+      );
     }
   };
 
@@ -93,16 +166,30 @@ export default function OtpScreen() {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.verifyButton} onPress={handleVerify}>
-          <Text
-            style={[
-              styles.verifyText,
-              { fontFamily: "ArimaMadurai_700Bold" },
-            ]}
-          >
-            Verify
-          </Text>
+        <TouchableOpacity 
+          style={[styles.verifyButton, loading && styles.verifyButtonDisabled]} 
+          onPress={handleVerify}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#A0C9A4" />
+          ) : (
+            <Text
+              style={[
+                styles.verifyText,
+                { fontFamily: "ArimaMadurai_700Bold" },
+              ]}
+            >
+              Verify
+            </Text>
+          )}
         </TouchableOpacity>
+        
+        {phoneNumber && (
+          <Text style={styles.phoneText}>
+            Code sent to {phoneNumber}
+          </Text>
+        )}
       </KeyboardAvoidingView>
     </LinearGradient>
   );
@@ -131,21 +218,23 @@ const styles = StyleSheet.create({
   },
   otpContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    width: "80%",
+    justifyContent: "center",
+    alignItems: "center",
+    width: "90%",
     marginBottom: 40,
+    gap: 10,
   },
   otpInput: {
     borderWidth: 1,
     borderColor: "#042222ff",
     backgroundColor: "#B6DDB3",
     borderRadius: 12,
-    width: 55,
-    height: 75,
+    width: 50,
+    height: 65,
     textAlign: "center",
-    fontSize: 20,
+    fontSize: 24,
     color: "#042222",
-    padding:20,
+    padding: 0,
   },
   verifyButton: {
     backgroundColor: "#042222",
@@ -156,5 +245,14 @@ const styles = StyleSheet.create({
   verifyText: {
     color: "#A0C9A4",
     fontSize: 18,
+  },
+  verifyButtonDisabled: {
+    opacity: 0.6,
+  },
+  phoneText: {
+    marginTop: 20,
+    fontSize: 12,
+    color: "#04222299",
+    fontFamily: "ArimaMadurai_400Regular",
   },
 });

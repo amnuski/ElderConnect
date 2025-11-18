@@ -11,15 +11,17 @@ import {
   Platform,
   UIManager,
   Modal,
+  ActivityIndicator,
 } from "react-native";
 import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
   useFonts
 } from "@expo-google-fonts/arima-madurai";
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
+import { apiGet, apiDelete } from "@/services/api";
 import scheduleEventEmitter from "./scheduleEventEmitter";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -27,32 +29,83 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 interface EventItem {
+  _id: string;
   title: string;
   time: string;
   date: string;
+  fromLocation?: string;
+  toLocation?: string;
 }
 
 const SchedulePage = () => {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [events, setEvents] = useState<EventItem[]>([]);
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [openIndex, setOpenIndex] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const scrollRef = useRef<ScrollView>(null);
 
+  // Load user data
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          setUser(JSON.parse(userStr));
+        }
+      } catch (error) {
+        console.error('Error loading user:', error);
+      }
+    };
+    loadUser();
+  }, []);
+
+  // Fetch schedules from backend
+  const fetchSchedules = async () => {
+    try {
+      if (!user) return;
+      setLoading(true);
+      const response = await apiGet<{ schedules: any[] }>('/schedules');
+      
+      // Map backend schedules to EventItem format
+      const mappedEvents = (response.schedules || []).map((schedule: any) => ({
+        _id: schedule._id,
+        title: schedule.title,
+        time: schedule.time,
+        date: new Date(schedule.date).toDateString(),
+        fromLocation: schedule.fromLocation,
+        toLocation: schedule.toLocation,
+      }));
+      
+      setEvents(mappedEvents);
+    } catch (error: any) {
+      console.error('Error fetching schedules:', error);
+      Alert.alert("Error", "Failed to load schedules. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load schedules when user is available
+  useEffect(() => {
+    if (user) {
+      fetchSchedules();
+    }
+  }, [user]);
+
+  // Listen for new events from event emitter
   useEffect(() => {
     const subscription = scheduleEventEmitter.addListener(
       "eventAdded",
-      (newEvent: EventItem & { editIndex?: number }) => {
-        if (newEvent.editIndex !== undefined) {
-          setEvents((prev) =>
-            prev.map((e, i) => (i === newEvent.editIndex ? newEvent : e))
-          );
-        } else setEvents((prev) => [...prev, newEvent]);
+      () => {
+        // Refresh schedules when new event is added
+        fetchSchedules();
       }
     );
     return () => subscription.remove();
-  }, []);
+  }, [user]);
 
   const todayStr = selectedDate.toDateString();
   const todayEvents = events.filter((e) => e.date === todayStr);
@@ -115,33 +168,47 @@ const SchedulePage = () => {
     }
   };
 
-  const handleDelete = (index: number) => {
+  const handleDelete = async (eventId: string) => {
     Alert.alert("Delete Event", "Are you sure you want to delete this event?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
-        onPress: () => setEvents((prev) => prev.filter((_, i) => i !== index)),
+        onPress: async () => {
+          try {
+            await apiDelete(`/schedules/${eventId}`);
+            // Remove from local state
+            setEvents((prev) => prev.filter((e) => e._id !== eventId));
+            setOpenIndex(null);
+            Alert.alert("Success", "Event deleted successfully!");
+          } catch (error: any) {
+            console.error('Error deleting schedule:', error);
+            Alert.alert("Error", error.message || "Failed to delete event. Please try again.");
+          }
+        },
       },
     ]);
   };
 
-  const handleEdit = (item: EventItem, index: number) => {
+  const handleEdit = (item: EventItem) => {
+    const eventDate = new Date(item.date);
     router.push({
       pathname: "/Family/add_schedule",
       params: {
-        selectedDate: selectedDate.toISOString(),
+        selectedDate: eventDate.toISOString(),
         editMode: "true",
-        eventIndex: index.toString(),
+        scheduleId: item._id,
         title: item.title,
         time: item.time,
+        fromLocation: item.fromLocation || "",
+        toLocation: item.toLocation || "",
       },
     });
   };
 
-  const toggleOpen = (index: number) => {
+  const toggleOpen = (eventId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setOpenIndex(openIndex === index ? null : index);
+    setOpenIndex(openIndex === eventId ? null : eventId);
   };
 
   const changeMonth = (direction: number) => {
@@ -242,10 +309,16 @@ const SchedulePage = () => {
       >
         {days.map((day, index) => {
           const isSelected = day.toDateString() === selectedDate.toDateString();
+          const dayStr = day.toDateString();
+          const hasEvent = events.some((event) => event.date === dayStr);
           return (
             <TouchableOpacity
               key={index}
-              style={[styles.dayCard, isSelected && styles.selectedDay]}
+              style={[
+                styles.dayCard, 
+                isSelected && styles.selectedDay,
+                hasEvent && !isSelected && styles.dayWithEvent
+              ]}
               onPress={() => handleDatePress(day)}
             >
               <Text
@@ -258,6 +331,9 @@ const SchedulePage = () => {
               >
                 {day.getDate()}
               </Text>
+              {hasEvent && !isSelected && (
+                <View style={styles.eventDot} />
+              )}
             </TouchableOpacity>
           );
         })}
@@ -272,43 +348,54 @@ const SchedulePage = () => {
       </Text>
 
       {/* 🔹 Events List */}
-      <FlatList
-        data={todayEvents}
-        keyExtractor={(_, index) => index.toString()}
-        renderItem={({ item, index }) => {
-          const isOpen = openIndex === index;
-          return (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => toggleOpen(index)}
-              style={styles.eventCard}
-            >
-              <View style={styles.eventTextContainer}>
-                <Text style={styles.eventTitle}>{item.title}</Text>
-                <Text style={styles.eventTime}>{item.time}</Text>
-              </View>
-
-              {isOpen && (
-                <View style={styles.iconWrapper}>
-                  <TouchableOpacity onPress={() => handleEdit(item, index)}>
-                    <MaterialIcons name="edit" size={20} color="#CFE7D3" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => handleDelete(index)}
-                    style={{ marginTop: 10 }}
-                  >
-                    <MaterialIcons name="delete" size={20} color="#CFE7D3" />
-                  </TouchableOpacity>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#04302B" />
+        </View>
+      ) : (
+        <FlatList
+          data={todayEvents}
+          keyExtractor={(item) => item._id}
+          renderItem={({ item }) => {
+            const isOpen = openIndex === item._id;
+            return (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => toggleOpen(item._id)}
+                style={styles.eventCard}
+              >
+                <View style={styles.eventTextContainer}>
+                  <Text style={styles.eventTitle}>{item.title}</Text>
+                  <Text style={styles.eventTime}>{item.time}</Text>
+                  {(item.fromLocation || item.toLocation) && (
+                    <Text style={styles.eventLocation} numberOfLines={1}>
+                      {item.fromLocation} → {item.toLocation}
+                    </Text>
+                  )}
                 </View>
-              )}
-            </TouchableOpacity>
-          );
-        }}
-        ListEmptyComponent={
-          <Text style={styles.noEvent}>No events for this day</Text>
-        }
-        contentContainerStyle={{ paddingBottom: 120 }}
-      />
+
+                {isOpen && (
+                  <View style={styles.iconWrapper}>
+                    <TouchableOpacity onPress={() => handleEdit(item)}>
+                      <MaterialIcons name="edit" size={20} color="#CFE7D3" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleDelete(item._id)}
+                      style={{ marginTop: 10 }}
+                    >
+                      <MaterialIcons name="delete" size={20} color="#CFE7D3" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }}
+          ListEmptyComponent={
+            <Text style={styles.noEvent}>No events for this day</Text>
+          }
+          contentContainerStyle={{ paddingBottom: 120 }}
+        />
+      )}
 
       <TouchableOpacity
         style={styles.addButton}
@@ -457,4 +544,27 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   closeText: { color: "#fff", fontWeight: "600", textAlign: "center" },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  eventLocation: {
+    color: "#B0EACD",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  dayWithEvent: {
+    borderWidth: 2,
+    borderColor: "#04302B",
+  },
+  eventDot: {
+    position: "absolute",
+    bottom: 8,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#04302B",
+  },
 });

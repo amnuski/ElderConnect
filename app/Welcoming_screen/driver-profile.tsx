@@ -1,5 +1,5 @@
 // app/Welcoming_screen/driver-profile.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,31 +9,46 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   useFonts,
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
 } from "@expo-google-fonts/arima-madurai";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { apiPut } from "@/services/api";
 
 export default function DriverProfileScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const role = params.role as string; // Should be 'driver'
 
   const [firstName, setFirstName] = useState("");
   const [age, setAge] = useState("");
   const [licenseNo, setLicenseNo] = useState("");
   const [profileUri, setProfileUri] = useState<string | null>(null);
   const [licenseImage, setLicenseImage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // Load fonts
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
+
+  useEffect(() => {
+    if (!role || role !== 'driver') {
+      Alert.alert("Error", "Driver role is required");
+      router.back();
+    }
+  }, [role]);
+
   if (!fontsLoaded) return null;
 
   const pickProfileImage = async () => {
@@ -55,21 +70,53 @@ export default function DriverProfileScreen() {
     if (!result.canceled) setLicenseImage(result.assets[0].uri);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!firstName.trim() || !age.trim() || !licenseNo.trim() || !licenseImage) {
-      alert("Please fill all fields and upload your license image");
+      Alert.alert("Error", "Please fill all fields and upload your license image");
       return;
     }
 
-    console.log("Driver Profile Submitted:", {
-      firstName,
-      age,
-      licenseNo,
-      profileUri,
-      licenseImage,
-    });
+    if (!role || role !== 'driver') {
+      Alert.alert("Error", "Driver role is required");
+      return;
+    }
 
-    router.push("/Driver/Driver-dash"); // ✅ Change path for driver dashboard
+    setLoading(true);
+
+    try {
+      // Update user profile with driver information
+      const updateData: any = {
+        firstName: firstName.trim(),
+        age: parseInt(age),
+        role: 'driver',
+        licenseNumber: licenseNo.trim(),
+      };
+
+      // Add images if selected (in production, upload to server first)
+      if (profileUri) {
+        updateData.profileImage = profileUri; // In production, upload to cloud storage first
+      }
+      if (licenseImage) {
+        updateData.licenseImage = licenseImage; // In production, upload to cloud storage first
+      }
+
+      const response = await apiPut<{ user: any }>('/users/me', updateData);
+
+      // Update stored user data
+      await AsyncStorage.setItem('user', JSON.stringify(response.user));
+
+      setLoading(false);
+
+      // Navigate to driver dashboard
+      router.replace('/Driver/Driver-dash');
+    } catch (error: any) {
+      setLoading(false);
+      console.error('Driver profile update error:', error);
+      Alert.alert(
+        "Error",
+        error.message || "Failed to save profile. Please try again."
+      );
+    }
   };
 
   return (
@@ -172,16 +219,21 @@ export default function DriverProfileScreen() {
           onPress={handleSubmit}
           activeOpacity={0.85}
           style={{ width: "100%", marginTop: 30 }}
+          disabled={loading}
         >
           <LinearGradient
             colors={["#042222", "#042222"]}
-            style={styles.submitButton}
+            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
           >
-            <Text
-              style={[styles.submitText, { fontFamily: "ArimaMadurai_700Bold" }]}
-            >
-              Submit
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text
+                style={[styles.submitText, { fontFamily: "ArimaMadurai_700Bold" }]}
+              >
+                Submit
+              </Text>
+            )}
           </LinearGradient>
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -284,4 +336,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   submitText: { color: "#fff", fontSize: 20, fontWeight: "bold" },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
 });

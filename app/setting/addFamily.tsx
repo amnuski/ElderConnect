@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,9 +10,13 @@ import {
   SafeAreaView,
   StatusBar as RNStatusBar,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { apiGet, apiPost, apiDelete } from "@/services/api";
 import {
   useFonts,
   ArimaMadurai_400Regular,
@@ -20,9 +24,10 @@ import {
 } from "@expo-google-fonts/arima-madurai";
 
 type FamilyMember = {
-  id: string;
+  _id: string;
   name: string;
   relation: string;
+  phone: string;
 };
 
 // ✅ Custom TextInput to apply ArimaMadurai font to input and placeholder
@@ -34,34 +39,105 @@ export default function FamilyPage() {
   const [phone, setPhone] = useState("");
   const [relation, setRelation] = useState("");
   const [name, setName] = useState("");
-  const [family, setFamily] = useState<FamilyMember[]>([
-    { id: "1", name: "Kavi", relation: "Son" },
-    { id: "2", name: "Ashu", relation: "Son" },
-  ]);
+  const [family, setFamily] = useState<FamilyMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
 
-  if (!fontsLoaded) return null;
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          const userData = JSON.parse(userStr);
+          setUser(userData);
+          await fetchFamilyMembers(userData);
+        }
+      } catch (error) {
+        console.error('Error loading user:', error);
+        setLoading(false);
+      }
+    };
+    loadUser();
+  }, []);
 
-  const addFamily = () => {
-    if (phone && relation && name) {
-      const newMember: FamilyMember = {
-        id: Date.now().toString(),
-        name,
-        relation,
-      };
-      setFamily((prev) => [...prev, newMember]);
-      setPhone("");
-      setRelation("");
-      setName("");
+  const fetchFamilyMembers = async (userData: any) => {
+    try {
+      setLoading(true);
+      const response = await apiGet<{ members: FamilyMember[] }>('/family');
+      setFamily(response.members || []);
+    } catch (error: any) {
+      console.error('Error fetching family members:', error);
+      Alert.alert("Error", error.message || "Failed to load family members");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const deleteMember = (id: string) => {
-    setFamily((prev) => prev.filter((item) => item.id !== id));
+  if (!fontsLoaded) return null;
+
+  const addFamily = async () => {
+    if (!phone || !relation || !name) {
+      Alert.alert("Error", "Please fill all fields");
+      return;
+    }
+
+    if (!user) {
+      Alert.alert("Error", "User not found. Please login again.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const elderId = user.role === 'elder' ? user._id : user._id; // For now, use current user's ID
+      await apiPost('/family', {
+        elderId,
+        name: name.trim(),
+        phone: phone.trim(),
+        relation: relation.trim(),
+      });
+      
+      // Refresh the list
+      await fetchFamilyMembers(user);
+      setPhone("");
+      setRelation("");
+      setName("");
+      Alert.alert("Success", "Family member added successfully!");
+    } catch (error: any) {
+      console.error('Error adding family member:', error);
+      Alert.alert("Error", error.message || "Failed to add family member");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteMember = async (id: string) => {
+    Alert.alert(
+      "Delete Family Member",
+      "Are you sure you want to delete this family member?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await apiDelete(`/family/${id}`);
+              setFamily((prev) => prev.filter((item) => item._id !== id));
+              Alert.alert("Success", "Family member deleted successfully!");
+            } catch (error: any) {
+              console.error('Error deleting family member:', error);
+              Alert.alert("Error", error.message || "Failed to delete family member");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderItem = ({ item }: { item: FamilyMember }) => (
@@ -69,15 +145,13 @@ export default function FamilyPage() {
       <View style={styles.memberDetails}>
         <Text style={styles.memberName}>{item.name}</Text>
         <Text style={styles.memberRelation}>{item.relation}</Text>
+        {item.phone && <Text style={styles.memberPhone}>{item.phone}</Text>}
       </View>
 
       <View style={styles.memberActions}>
-        <TouchableOpacity style={styles.iconBtn}>
-          <Ionicons name="create-outline" size={20} color="#04302B" />
-        </TouchableOpacity>
         <TouchableOpacity
           style={styles.iconBtn}
-          onPress={() => deleteMember(item.id)}
+          onPress={() => deleteMember(item._id)}
         >
           <Ionicons name="trash-outline" size={20} color="#B00020" />
         </TouchableOpacity>
@@ -133,19 +207,38 @@ export default function FamilyPage() {
           style={styles.input}
         />
 
-        <TouchableOpacity style={styles.connectBtn} onPress={addFamily}>
-          <Text style={styles.connectBtnText}>Connect</Text>
+        <TouchableOpacity 
+          style={[styles.connectBtn, saving && styles.connectBtnDisabled]} 
+          onPress={addFamily}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.connectBtnText}>Connect</Text>
+          )}
         </TouchableOpacity>
       </View>
 
       {/* Family List */}
-      <FlatList
-        data={family}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        style={styles.familyList}
-        contentContainerStyle={styles.familyListContainer}
-      />
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#04302B" />
+        </View>
+      ) : (
+        <FlatList
+          data={family}
+          keyExtractor={(item) => item._id}
+          renderItem={renderItem}
+          style={styles.familyList}
+          contentContainerStyle={styles.familyListContainer}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No family members added yet</Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -238,5 +331,29 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     marginLeft: 10,
+  },
+  connectBtnDisabled: {
+    opacity: 0.6,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  emptyContainer: {
+    paddingVertical: 40,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontFamily: "ArimaMadurai_400Regular",
+    fontSize: 14,
+    color: "#666",
+  },
+  memberPhone: {
+    color: "#666",
+    fontFamily: "ArimaMadurai_400Regular",
+    fontSize: 12,
+    marginTop: 2,
   },
 });

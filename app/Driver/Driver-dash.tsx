@@ -60,7 +60,7 @@ export default function DriverDash() {
           {/* Call Icon */}
           <TouchableOpacity
             style={styles.callIconContainer}
-            onPress={() => router.push("/Call/contactList")}
+            onPress={() => router.push("//Call/contactList")}
           >
             <Ionicons name="call-outline" size={32} color="#fff" />
           </TouchableOpacity>

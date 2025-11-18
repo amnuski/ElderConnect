@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,13 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   useFonts,
   ArimaMadurai_400Regular,
@@ -19,14 +21,36 @@ import {
 } from '@expo-google-fonts/arima-madurai';
 
 export default function SettingsScreen() {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_500Medium,
     ArimaMadurai_700Bold,
   });
 
-  if (!fontsLoaded) {
-    return null; // loading screen
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          setUser(JSON.parse(userStr));
+        }
+      } catch (error) {
+        console.error('Error loading user:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadUser();
+  }, []);
+
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EAF3E9' }}>
+        <ActivityIndicator size="large" color="#04302B" />
+      </View>
+    );
   }
 
   return (
@@ -49,11 +73,15 @@ export default function SettingsScreen() {
             {/* Profile Section */}
             <View style={styles.profileSection}>
               <Image
-                source={require('../../assets/images/elder.png')}
+                source={
+                  user?.profileImage
+                    ? { uri: user.profileImage }
+                    : require('../../assets/images/elder.png')
+                }
                 style={styles.avatar}
               />
-              <Text style={styles.name}>Murukaiya Rajah</Text>
-              <Text style={styles.phone}>0771234567</Text>
+              <Text style={styles.name}>{user?.firstName || 'User'}</Text>
+              <Text style={styles.phone}>{user?.phoneNumber || ''}</Text>
             </View>
 
             {/* Menu List */}

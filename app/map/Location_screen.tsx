@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -6,13 +6,18 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
+  FlatList,
 } from "react-native";
 import MapView, { Marker, Polyline, LatLng } from "react-native-maps";
+import * as Location from "expo-location";
+import { Ionicons } from "@expo/vector-icons";
 
 interface NominatimResult {
   lat: string;
   lon: string;
   display_name: string;
+  place_id: number;
 }
 
 export default function App() {
@@ -26,35 +31,116 @@ export default function App() {
   const [route, setRoute] = useState<LatLng[]>([]);
   const [distance, setDistance] = useState<number | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
+  const [loadingLocation, setLoadingLocation] = useState(true);
+  const [searchResults, setSearchResults] = useState<NominatimResult[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [searching, setSearching] = useState(false);
 
-  // Search using OpenStreetMap Nominatim
-  const searchLocation = async (query: string, setLocation: (loc: LatLng) => void) => {
-    if (!query) return;
+  // Get current location
+  const getCurrentLocation = async () => {
+    try {
+      setLoadingLocation(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Please enable location access to use this feature.");
+        setLoadingLocation(false);
+        return;
+      }
 
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const currentLoc: LatLng = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+
+      setStartLocation(currentLoc);
+
+      // Reverse geocode to get address
+      const [address] = await Location.reverseGeocodeAsync(currentLoc);
+      const addressString = `${address.name || ""}${address.street ? ", " + address.street : ""}${address.city ? ", " + address.city : ""}${address.region ? ", " + address.region : ""}`.trim();
+      setStartText(addressString || "Current Location");
+
+      // Center map on current location
+      mapRef.current?.animateToRegion({
+        ...currentLoc,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }, 1000);
+    } catch (error) {
+      console.error("Error getting location:", error);
+      Alert.alert("Error", "Failed to get current location. Please try again.");
+    } finally {
+      setLoadingLocation(false);
+    }
+  };
+
+  // Search locations using OpenStreetMap Nominatim
+  const searchLocations = async (query: string) => {
+    if (!query || query.length < 3) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearching(true);
     try {
       const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
         query
-      )}`;
+      )}&limit=5&addressdetails=1`;
 
       const response = await fetch(url, {
         headers: {
-          "User-Agent": "DriverApp/1.0 (your_email@example.com)",
+          "User-Agent": "ElderConnectApp/1.0",
           "Accept-Language": "en",
         },
       });
 
       const data: NominatimResult[] = await response.json();
-      if (data.length > 0) {
-        const loc: LatLng = { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
-        setLocation(loc);
-        mapRef.current?.animateToRegion({ ...loc, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 1000);
-      } else {
-        Alert.alert("Location not found");
-      }
+      setSearchResults(data);
+      setShowSearchResults(data.length > 0);
     } catch (error) {
       console.error("Search error:", error);
+      Alert.alert("Error", "Failed to search locations. Please try again.");
+    } finally {
+      setSearching(false);
     }
   };
+
+  // Select a location from search results
+  const selectLocation = (result: NominatimResult, isStart: boolean = false) => {
+    const loc: LatLng = {
+      latitude: parseFloat(result.lat),
+      longitude: parseFloat(result.lon),
+    };
+
+    if (isStart) {
+      setStartLocation(loc);
+      setStartText(result.display_name);
+    } else {
+      setEndLocation(loc);
+      setEndText(result.display_name);
+      // Auto-calculate route if start location exists
+      if (startLocation) {
+        getRoute();
+      }
+    }
+
+    setShowSearchResults(false);
+    setSearchResults([]);
+    mapRef.current?.animateToRegion({
+      ...loc,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    }, 1000);
+  };
+
+  // Load current location on mount
+  useEffect(() => {
+    getCurrentLocation();
+  }, []);
 
   // Get route from OSRM
   const getRoute = async (mode: "car" | "bike" | "foot" = "car") => {
@@ -105,28 +191,66 @@ export default function App() {
 
       {/* Search bars */}
       <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Start location"
-          value={startText}
-          onChangeText={setStartText}
-        />
-        <TouchableOpacity style={styles.button} onPress={() => searchLocation(startText, setStartLocation)}>
-          <Text style={styles.buttonText}>From</Text>
-        </TouchableOpacity>
+        <View style={styles.inputContainer}>
+          <Ionicons name="location" size={20} color="#04302B" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="From (Current Location)"
+            value={startText}
+            onChangeText={setStartText}
+            editable={false}
+            placeholderTextColor="#999"
+          />
+          {loadingLocation ? (
+            <ActivityIndicator size="small" color="#04302B" style={styles.loadingIcon} />
+          ) : (
+            <TouchableOpacity onPress={getCurrentLocation} style={styles.locationButton}>
+              <Ionicons name="refresh" size={20} color="#04302B" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <View style={[styles.searchContainer, { top: 100 }]}>
-        <TextInput
-          style={styles.input}
-          placeholder="Destination"
-          value={endText}
-          onChangeText={setEndText}
-        />
-        <TouchableOpacity style={styles.button} onPress={() => searchLocation(endText, setEndLocation)}>
-          <Text style={styles.buttonText}>To</Text>
-        </TouchableOpacity>
+        <View style={styles.inputContainer}>
+          <Ionicons name="search" size={20} color="#04302B" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="To (Search destination)"
+            value={endText}
+            onChangeText={(text) => {
+              setEndText(text);
+              searchLocations(text);
+            }}
+            placeholderTextColor="#999"
+          />
+          {searching && (
+            <ActivityIndicator size="small" color="#04302B" style={styles.loadingIcon} />
+          )}
+        </View>
       </View>
+
+      {/* Search Results Modal */}
+      {showSearchResults && searchResults.length > 0 && (
+        <View style={styles.searchResultsContainer}>
+          <FlatList
+            data={searchResults}
+            keyExtractor={(item) => item.place_id.toString()}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.searchResultItem}
+                onPress={() => selectLocation(item, false)}
+              >
+                <Ionicons name="location-outline" size={20} color="#04302B" />
+                <Text style={styles.searchResultText} numberOfLines={2}>
+                  {item.display_name}
+                </Text>
+              </TouchableOpacity>
+            )}
+            style={styles.searchResultsList}
+          />
+        </View>
+      )}
 
       {/* Directions info */}
       {startLocation && endLocation && (
@@ -158,19 +282,63 @@ const styles = StyleSheet.create({
     top: 40,
     left: 10,
     right: 10,
-    flexDirection: "row",
     backgroundColor: "white",
-    borderRadius: 5,
-    padding: 5,
-    alignItems: "center",
+    borderRadius: 10,
+    padding: 8,
     shadowColor: "#000",
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 5,
   },
-  input: { flex: 1, padding: 8 },
-  button: { backgroundColor: "#04302B", padding: 10, borderRadius: 5, marginLeft: 5 },
-  buttonText: { color: "white", fontWeight: "bold" },
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
+    padding: 8,
+    fontSize: 16,
+    color: "#000",
+  },
+  loadingIcon: {
+    marginLeft: 8,
+  },
+  locationButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  searchResultsContainer: {
+    position: "absolute",
+    top: 150,
+    left: 10,
+    right: 10,
+    backgroundColor: "white",
+    borderRadius: 10,
+    maxHeight: 200,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  searchResultsList: {
+    maxHeight: 200,
+  },
+  searchResultItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  searchResultText: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 14,
+    color: "#333",
+  },
   directionContainer: {
     position: "absolute",
     bottom: 30,

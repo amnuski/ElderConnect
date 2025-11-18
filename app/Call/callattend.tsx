@@ -1,17 +1,38 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View, Linking } from "react-native";
 
 export default function CallAttended() {
-  const { name, phone } = useLocalSearchParams();
+  const { name, phone, callType } = useLocalSearchParams(); // callType: 'incoming' or 'outgoing'
   const router = useRouter();
-  const [callStatus, setCallStatus] = useState("incoming");
+  const [callStatus, setCallStatus] = useState(callType === 'outgoing' ? 'outgoing' : 'incoming');
 
-  const handleAccept = () => setCallStatus("inCall");
-  const handleDecline = () => setCallStatus("ended");
-  const handleEndCall = () => setCallStatus("ended");
+  const handleAccept = () => {
+    setCallStatus("inCall");
+    // In a real app, you'd connect the call here
+  };
+
+  const handleDecline = () => {
+    setCallStatus("ended");
+    // In a real app, you'd reject the call here
+  };
+
+  const handleEndCall = () => {
+    setCallStatus("ended");
+    // In a real app, you'd end the call here
+  };
+
   const handleBack = () => router.back();
+
+  // For outgoing calls, initiate the call
+  React.useEffect(() => {
+    if (callType === 'outgoing' && phone) {
+      const cleanPhone = phone.toString().replace(/[^\d+]/g, '');
+      Linking.openURL(`tel:${cleanPhone}`);
+      setCallStatus('outgoing');
+    }
+  }, [callType, phone]);
 
   return (
     <View style={styles.container}>
@@ -34,6 +55,7 @@ export default function CallAttended() {
 
       {/* Status text */}
       {callStatus === "incoming" && <Text style={styles.status}>Incoming call...</Text>}
+      {callStatus === "outgoing" && <Text style={styles.status}>Calling...</Text>}
       {callStatus === "inCall" && <Text style={styles.status}>In call...</Text>}
       {callStatus === "ended" && <Text style={styles.statusEnd}>Call Ended</Text>}
 
@@ -55,6 +77,15 @@ export default function CallAttended() {
               <Ionicons name="call" size={30} color="#fff" />
             </TouchableOpacity>
           </>
+        )}
+
+        {callStatus === "outgoing" && (
+          <TouchableOpacity
+            style={[styles.callBtn, { backgroundColor: "#E53935" }]}
+            onPress={handleEndCall}
+          >
+            <Ionicons name="call" size={30} color="#fff" />
+          </TouchableOpacity>
         )}
 
         {callStatus === "inCall" && (

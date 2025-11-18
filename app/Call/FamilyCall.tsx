@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -15,6 +15,8 @@ import {
   TextInput,
   View,
   ActivityIndicator,
+  Linking,
+  RefreshControl,
 } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 import {
@@ -22,12 +24,16 @@ import {
   ArimaMadurai_700Bold,
   useFonts,
 } from "@expo-google-fonts/arima-madurai";
+import { apiGet, apiPost, apiPut, apiDelete } from "@/services/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Contact type
 interface Contact {
-  id: number;
+  _id: string;
   name: string;
   phone: string;
+  relation?: string;
+  isEmergency?: boolean;
 }
 
 // AnimatedIcon component
@@ -65,19 +71,46 @@ const AnimatedIcon: React.FC<AnimatedIconProps> = ({
 };
 
 export default function FamilyCall() {
-  const [contacts, setContacts] = useState<Contact[]>([
-    { id: 1, name: "Raja", phone: "0771234567" },
-    { id: 2, name: "Hiruni", phone: "0719876543" },
-  ]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
+
+  // Fetch family members from backend
+  const fetchContacts = async () => {
+    try {
+      const response = await apiGet<{ members: Contact[] }>('/family');
+      // Map family members to contact format
+      const familyContacts = (response.members || []).map((member: any) => ({
+        _id: member._id,
+        name: member.name,
+        phone: member.phone,
+        relation: member.relation,
+      }));
+      setContacts(familyContacts);
+    } catch (error: any) {
+      console.error('Error fetching family members:', error);
+      Alert.alert("Error", "Failed to load family members. Please try again.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      fetchContacts();
+    }
+  }, [fontsLoaded]);
 
   if (!fontsLoaded) {
     return (
@@ -101,43 +134,68 @@ export default function FamilyCall() {
     setModalVisible(true);
   };
 
-  const saveContact = () => {
+  const saveContact = async () => {
     if (!nameInput.trim() || !phoneInput.trim()) {
       Alert.alert("Validation", "Please enter name and phone number.");
       return;
     }
 
-    if (editingContact) {
-      setContacts((prev) =>
-        prev.map((c) =>
-          c.id === editingContact.id
-            ? { ...c, name: nameInput.trim(), phone: phoneInput.trim() }
-            : c
-        )
-      );
-      Alert.alert("Updated", "Contact updated successfully!");
-    } else {
-      const newId = contacts.length
-        ? Math.max(...contacts.map((c) => c.id)) + 1
-        : 1;
-      setContacts((prev) => [
-        { id: newId, name: nameInput.trim(), phone: phoneInput.trim() },
-        ...prev,
-      ]);
-      Alert.alert("Added", "New contact added successfully!");
-    }
+    setSaving(true);
 
-    setModalVisible(false);
+    try {
+      // Get user to determine elderId
+      const userStr = await AsyncStorage.getItem('user');
+      if (!userStr) {
+        Alert.alert("Error", "User not found. Please login again.");
+        setSaving(false);
+        return;
+      }
+      const user = JSON.parse(userStr);
+      const elderId = user.role === 'elder' ? user._id : user._id;
+
+      if (editingContact) {
+        // Note: Family members don't have update endpoint, so we'll need to delete and recreate
+        // Or you can add an update endpoint to the backend
+        Alert.alert("Info", "To update, please delete and add again, or use the settings page.");
+        setSaving(false);
+        return;
+      } else {
+        // Create new family member
+        await apiPost('/family', {
+          elderId,
+          name: nameInput.trim(),
+          phone: phoneInput.trim(),
+          relation: 'Family',
+        });
+        Alert.alert("Added", "New family member added successfully!");
+      }
+
+      setModalVisible(false);
+      fetchContacts(); // Refresh contacts list
+    } catch (error: any) {
+      console.error('Error saving family member:', error);
+      Alert.alert("Error", error.message || "Failed to save family member. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const deleteContact = (contact: Contact) => {
-    Alert.alert("Delete contact", `Delete ${contact.name}?`, [
+    Alert.alert("Delete family member", `Delete ${contact.name}?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
-        onPress: () =>
-          setContacts((prev) => prev.filter((c) => c.id !== contact.id)),
+        onPress: async () => {
+          try {
+            await apiDelete(`/family/${contact._id}`);
+            setContacts((prev) => prev.filter((c) => c._id !== contact._id));
+            Alert.alert("Deleted", "Family member removed successfully!");
+          } catch (error: any) {
+            console.error('Error deleting family member:', error);
+            Alert.alert("Error", "Failed to delete family member. Please try again.");
+          }
+        },
       },
     ]);
   };
@@ -159,6 +217,12 @@ export default function FamilyCall() {
     </View>
   );
 
+  const makeCall = (phone: string) => {
+    // Remove any non-digit characters except +
+    const cleanPhone = phone.replace(/[^\d+]/g, '');
+    Linking.openURL(`tel:${cleanPhone}`);
+  };
+
   const renderContact = ({ item }: { item: Contact }) => (
     <Swipeable renderRightActions={() => renderRightActions(item)}>
       <View style={styles.contactCard}>
@@ -174,12 +238,13 @@ export default function FamilyCall() {
           <AnimatedIcon
             name="call-outline"
             size={26}
-            onPress={() =>
+            onPress={() => {
+              // Make outgoing call
               router.push({
-                pathname: "../drivercallui",
-                params: { name: item.name, phone: item.phone },
-              })
-            }
+                pathname: "/Call/callattend",
+                params: { name: item.name, phone: item.phone, callType: 'outgoing' },
+              });
+            }}
           />
           <AnimatedIcon
             name="videocam-outline"
@@ -223,26 +288,38 @@ export default function FamilyCall() {
           />
         </View>
 
-        <FlatList
-          data={contacts}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderContact}
-          contentContainerStyle={{ paddingBottom: 160 }}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          ListEmptyComponent={
-            <View style={{ marginTop: 40, alignItems: "center" }}>
-              <Text
-                style={{
-                  color: "#0a3d2e",
-                  opacity: 0.7,
-                  fontFamily: "ArimaMadurai_400Regular",
-                }}
-              >
-                No contacts — tap + to add
-              </Text>
-            </View>
-          }
-        />
+        {loading ? (
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ActivityIndicator size="large" color="#0a3d2e" />
+          </View>
+        ) : (
+          <FlatList
+            data={contacts}
+            keyExtractor={(item) => item._id}
+            renderItem={renderContact}
+            contentContainerStyle={{ paddingBottom: 160 }}
+            ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => {
+                setRefreshing(true);
+                fetchContacts();
+              }} />
+            }
+            ListEmptyComponent={
+              <View style={{ marginTop: 40, alignItems: "center" }}>
+                <Text
+                  style={{
+                    color: "#0a3d2e",
+                    opacity: 0.7,
+                    fontFamily: "ArimaMadurai_400Regular",
+                  }}
+                >
+                  No contacts — tap + to add
+                </Text>
+              </View>
+            }
+          />
+        )}
 
         <Pressable style={styles.floatingBtn} onPress={openAddModal}>
           <Ionicons name="add" size={30} color="white" />
@@ -301,19 +378,24 @@ export default function FamilyCall() {
                 </Pressable>
                 <Pressable
                   onPress={saveContact}
+                  disabled={saving}
                   style={[
                     styles.modalBtn,
-                    { marginLeft: 10, backgroundColor: "#0a3d2e" },
+                    { marginLeft: 10, backgroundColor: "#0a3d2e", opacity: saving ? 0.6 : 1 },
                   ]}
                 >
-                  <Text
-                    style={{
-                      color: "white",
-                      fontFamily: "ArimaMadurai_700Bold",
-                    }}
-                  >
-                    {editingContact ? "Save" : "Add"}
-                  </Text>
+                  {saving ? (
+                    <ActivityIndicator color="white" size="small" />
+                  ) : (
+                    <Text
+                      style={{
+                        color: "white",
+                        fontFamily: "ArimaMadurai_700Bold",
+                      }}
+                    >
+                      {editingContact ? "Save" : "Add"}
+                    </Text>
+                  )}
                 </Pressable>
               </View>
             </View>
