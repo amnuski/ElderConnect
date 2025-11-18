@@ -40,6 +40,13 @@
           }
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "sounds": [],
+          "enableAutoRegistration": false
+        }
+      ],
       "expo-font"
     ],
     "experiments": {

@@ -12,16 +12,10 @@ import {
   UIManager,
   Modal,
 } from "react-native";
-import {
-  ArimaMadurai_400Regular,
-  ArimaMadurai_700Bold,
-  useFonts
-} from "@expo-google-fonts/arima-madurai";
-
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import scheduleEventEmitter from "./scheduleEventEmitter";
-import apiService from "../../constants/api";
+import api from "../../constants/api";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -59,7 +53,7 @@ const SchedulePage = () => {
   useEffect(() => {
     const loadSchedules = async () => {
       try {
-        const response = await apiService.getSchedules();
+        const response = await api.getSchedules();
         if (response?.schedules) {
           // Map backend schedules to EventItem shape
           const mapped = response.schedules.map((s: any) => ({

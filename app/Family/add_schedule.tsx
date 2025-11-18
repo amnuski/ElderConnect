@@ -9,8 +9,9 @@ import {
   ActivityIndicator,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import * as Notifications from 'expo-notifications';
-import apiService from "../../constants/api";
+import * as Notifications from "expo-notifications";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import api from "../../constants/api";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
@@ -76,11 +77,10 @@ const AddSchedule = () => {
     }
 
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      const userDataStr = await AsyncStorage.getItem('userData');
+      const userDataStr = await AsyncStorage.getItem("userData");
       if (!userDataStr) {
-        Alert.alert('Error', 'User not found. Please login again.');
-        router.push('/Welcoming_screen/verify-num');
+        Alert.alert("Error", "User not found. Please login again.");
+        router.push("/Welcoming_screen/verify-num");
         return;
       }
       const userData = JSON.parse(userDataStr);
@@ -103,7 +103,7 @@ const AddSchedule = () => {
       };
 
       // Create schedule on backend
-      const response = await apiService.createSchedule(payload);
+      const response = await api.createSchedule(payload);
       if (response?.schedule) {
         const created = response.schedule;
 

@@ -18,7 +18,8 @@ import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
 } from "@expo-google-fonts/arima-madurai";
-import apiService from "../../constants/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import api from "../../constants/api";
 
 export default function DriverDash() {
   const [fontsLoaded] = useFonts({
@@ -34,8 +35,6 @@ export default function DriverDash() {
 
   const loadUserData = async () => {
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      
       // Try to get from storage first
       const userDataStr = await AsyncStorage.getItem('userData');
       let storedUserData = null;
@@ -45,7 +44,7 @@ export default function DriverDash() {
       }
       
       // Fetch latest from backend (use /me endpoint which doesn't need userId)
-      const response = await apiService.getUserProfile();
+      const response = await api.getUserProfile();
       if (response.user) {
         setUserData(response.user);
         await AsyncStorage.setItem('userData', JSON.stringify(response.user));
@@ -57,7 +56,6 @@ export default function DriverDash() {
       console.error('Error loading user data:', error);
       // If error, try to use stored data if available
       try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
         const userDataStr = await AsyncStorage.getItem('userData');
         if (userDataStr) {
           setUserData(JSON.parse(userDataStr));

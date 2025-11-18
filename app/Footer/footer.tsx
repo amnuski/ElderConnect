@@ -1,14 +1,7 @@
 // components/Footer.tsx
 import React from "react";
 import { router } from "expo-router";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Dimensions,
-  Image,
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -16,8 +9,6 @@ import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
 } from "@expo-google-fonts/arima-madurai";
-
-const { height: screenHeight } = Dimensions.get("window");
 
 interface FooterProps {
   activeTab?: string;

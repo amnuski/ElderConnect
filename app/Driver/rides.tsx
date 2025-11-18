@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -20,7 +20,8 @@ import {
 import { MaterialIcons } from "@expo/vector-icons";
 import scheduleEventEmitter from "../Family/scheduleEventEmitter"; // same emitter used in Family Schedule
 import DriverFooter from "../Footer/DriverFooter"; // ✅ Import footer
-import apiService from "../../constants/api";
+import api from "../../constants/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 if (
   Platform.OS === "android" &&
@@ -83,13 +84,11 @@ const DriverSchedulePage = () => {
   const loadRides = async () => {
     try {
       setLoading(true);
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      
       const userDataStr = await AsyncStorage.getItem('userData');
       if (!userDataStr) return;
       
       const userData = JSON.parse(userDataStr);
-      const response = await apiService.getRides({ driverId: userData._id });
+      const response = await api.getRides({ driverId: userData._id });
       
       if (response.rides) {
         // Convert rides to event format for display
@@ -123,9 +122,6 @@ const DriverSchedulePage = () => {
     loadRides();
   };
 
-  const today = new Date();
-  const todayStr = today.toDateString();
-
   // Combine events and rides for today
   const todayEvents = [
     ...events.filter((e) => e.date === selectedDate.toDateString()),
@@ -141,18 +137,18 @@ const DriverSchedulePage = () => {
     return days;
   };
 
-  const days = getAllDaysInMonth(selectedDate);
+  const days = useMemo(() => getAllDaysInMonth(selectedDate), [selectedDate]);
 
   useEffect(() => {
-    const todayIndex = days.findIndex(
+    const currentMonthDays = getAllDaysInMonth(selectedDate);
+    const todayIndex = currentMonthDays.findIndex(
       (d) => d.toDateString() === new Date().toDateString()
     );
+
     if (todayIndex !== -1 && scrollRef.current) {
       scrollRef.current.scrollTo({ x: todayIndex * 60, animated: false });
     }
-
-    setSelectedDate(new Date());
-  }, []);
+  }, [selectedDate]);
 
   const changeMonth = (direction: number) => {
     const newDate = new Date(selectedDate);

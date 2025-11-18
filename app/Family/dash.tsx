@@ -16,7 +16,8 @@ import {
 } from "react-native";
 import Footer from "../Footer/footer";
 import { useRouter } from "expo-router";
-import apiService from "../../constants/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import api from "../../constants/api";
 import scheduleEventEmitter from "./scheduleEventEmitter";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
@@ -39,8 +40,7 @@ export default function Dashboard() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        const userDataStr = await AsyncStorage.getItem('userData');
+        const userDataStr = await AsyncStorage.getItem("userData");
         let storedUser = null;
         if (userDataStr) {
           storedUser = JSON.parse(userDataStr);
@@ -49,16 +49,16 @@ export default function Dashboard() {
 
         // Try fetching fresh data from backend
         try {
-          const response = await apiService.getUserProfile();
+          const response = await api.getUserProfile();
           if (response?.user) {
             setUserData(response.user);
-            await AsyncStorage.setItem('userData', JSON.stringify(response.user));
+            await AsyncStorage.setItem("userData", JSON.stringify(response.user));
           }
-        } catch (e) {
+        } catch {
           // ignore network errors, keep stored user
         }
-      } catch (e) {
-        console.warn('Failed to load user data for family dashboard', e);
+      } catch (error) {
+        console.warn("Failed to load user data for family dashboard", error);
       } finally {
         setLoadingUser(false);
       }
@@ -68,12 +68,12 @@ export default function Dashboard() {
     // also load schedules for header quick view
     const loadSchedules = async () => {
       try {
-        const response = await apiService.getSchedules();
+        const response = await api.getSchedules();
         if (response?.schedules) {
           setSchedules(response.schedules || []);
         }
-      } catch (e) {
-        console.warn('Failed to load schedules for header', e);
+      } catch (error) {
+        console.warn("Failed to load schedules for header", error);
       }
     };
     loadSchedules();
@@ -136,7 +136,7 @@ export default function Dashboard() {
         try {
           const parsed = new Date(newEvent.date);
           if (!isNaN(parsed.getTime())) isoDate = parsed.toISOString();
-        } catch (e) {
+        } catch {
           isoDate = null;
         }
       }
@@ -285,7 +285,7 @@ export default function Dashboard() {
           <View style={styles.additionalContent}>
             <Text style={styles.additionalTitle}>Additional Information</Text>
             <Text style={styles.additionalText}>
-              This content ensures that the footer doesn't hide any important
+              This content ensures that the footer doesn&apos;t hide any important
               information. The footer floats above the content with proper
               spacing.
             </Text>

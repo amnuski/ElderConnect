@@ -1,5 +1,6 @@
 // API Configuration and Service Functions
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Get the correct API URL based on platform
 const getApiBaseUrl = () => {
@@ -59,7 +60,6 @@ class ApiService {
   // Get stored token
   private async getToken(): Promise<string | null> {
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       return await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     } catch (error) {
       console.error('Error getting token:', error);
@@ -70,7 +70,6 @@ class ApiService {
   // Store tokens
   async storeTokens(accessToken: string, refreshToken: string, userData: any) {
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       await AsyncStorage.multiSet([
         [STORAGE_KEYS.ACCESS_TOKEN, accessToken],
         [STORAGE_KEYS.REFRESH_TOKEN, refreshToken],
@@ -84,7 +83,6 @@ class ApiService {
   // Clear tokens
   async clearTokens() {
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       await AsyncStorage.multiRemove([
         STORAGE_KEYS.ACCESS_TOKEN,
         STORAGE_KEYS.REFRESH_TOKEN,
@@ -257,6 +255,6 @@ class ApiService {
   }
 }
 
-export const apiService = new ApiService();
-export default apiService;
+const apiClient = new ApiService();
+export default apiClient;
 

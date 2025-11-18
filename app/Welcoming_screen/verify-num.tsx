@@ -23,7 +23,7 @@ import {
 import CountryPicker, { CountryCode } from "react-native-country-picker-modal";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useRouter } from "expo-router";
-import apiService from "../../constants/api";
+import api from "../../constants/api";
 
 export default function PhoneNumberScreen() {
   const router = useRouter();
@@ -53,7 +53,7 @@ export default function PhoneNumberScreen() {
     setLoading(true);
 
     try {
-      const response = await apiService.sendOTP(fullNumber);
+      const response = await api.sendOTP(fullNumber);
       // If the backend indicates an existing user, show account brief info
       if (response?.userExists) {
         const user = response.user;

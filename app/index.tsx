@@ -48,7 +48,7 @@ export default function WelcomeScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [fontsLoaded]);
+  }, [boxY, fontsLoaded, logoY]);
 
   if (!fontsLoaded) return null;
 

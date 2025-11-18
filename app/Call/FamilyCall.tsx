@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import "react/compiler-runtime"
 import {
   Alert,
   Animated,

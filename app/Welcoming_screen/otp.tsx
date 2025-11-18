@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import apiService from "../../constants/api";
+import api from "../../constants/api";
 import {
   useFonts,
   KaushanScript_400Regular,
@@ -25,10 +25,10 @@ import {
 export default function OtpScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [otp, setOtp] = useState(["", "", "", "","",""]); // 6 digits OTP
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]); // 6 digits OTP
 
   // store references to each TextInput
-  const inputs = useRef<Array<TextInput | null>>([]);
+  const inputs = useRef<(TextInput | null)[]>([]);
 
   const [fontsLoaded] = useFonts({
     KaushanScript_400Regular,
@@ -63,10 +63,10 @@ export default function OtpScreen() {
     }
 
     try {
-      const response = await apiService.verifyOTP(phoneNumber, code);
+      const response = await api.verifyOTP(phoneNumber, code);
       
       // Store tokens and user data
-      await apiService.storeTokens(
+      await api.storeTokens(
         response.accessToken,
         response.refreshToken,
         response.user

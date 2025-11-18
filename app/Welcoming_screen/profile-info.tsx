@@ -19,7 +19,8 @@ import {
   ArimaMadurai_700Bold,
 } from "@expo-google-fonts/arima-madurai";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import apiService from "../../constants/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import api from "../../constants/api";
 
 export default function ProfileInfoScreen() {
   const router = useRouter();
@@ -55,10 +56,8 @@ export default function ProfileInfoScreen() {
     }
 
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      
       // Get user data from storage
-      const userDataStr = await AsyncStorage.getItem('userData');
+      const userDataStr = await AsyncStorage.getItem("userData");
       if (!userDataStr) {
         alert("User data not found. Please login again.");
         router.push("/Welcoming_screen/verify-num");
@@ -78,7 +77,7 @@ export default function ProfileInfoScreen() {
         updateData.profileImage = imageUri;
       }
 
-      const response = await apiService.updateProfile(userData._id, updateData);
+      const response = await api.updateProfile(userData._id, updateData);
 
       // Persist updated user data locally so dashboards show updated name/image immediately
       try {
