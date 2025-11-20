@@ -172,4 +172,3 @@ export function logApiConfiguration() {
   console.log('  Dev API IP:', config.devApiIp);
   console.log('  Dev API Port:', config.devApiPort);
 }
-

@@ -102,24 +102,8 @@ export default function OtpScreen() {
 
       setLoading(false);
 
-      // Check if user has a role (existing account)
-      if (response.user.role) {
-        // Existing user - navigate to their dashboard based on role
-        switch (response.user.role) {
-          case 'elder':
-          case 'family':
-            router.replace('/Family/dash');
-            break;
-          case 'driver':
-            router.replace('/Driver/Driver-dash');
-            break;
-          default:
-            router.replace('/Welcoming_screen/role-selection');
-        }
-      } else {
-        // New user - navigate to role selection
-        router.replace('/Welcoming_screen/role-selection');
-      }
+      // After verification, always navigate to role selection so the user can confirm/update their role
+      router.replace('/Welcoming_screen/role-selection');
     } catch (error: any) {
       setLoading(false);
       console.error('OTP verification error:', error);

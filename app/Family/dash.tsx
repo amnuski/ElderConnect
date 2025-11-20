@@ -279,12 +279,6 @@ export default function Dashboard() {
             ) : activities.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>No activities scheduled for today</Text>
-                <TouchableOpacity
-                  style={styles.addActivityButton}
-                  onPress={() => router.push("/Family/add_schedule")}
-                >
-                  <Text style={styles.addActivityText}>Add Activity</Text>
-                </TouchableOpacity>
               </View>
             ) : (
               <>
@@ -492,17 +486,6 @@ const styles = StyleSheet.create({
     fontSize: screenWidth * 0.04,
     color: "#666",
     marginBottom: screenHeight * 0.02,
-  },
-  addActivityButton: {
-    backgroundColor: "#04302B",
-    paddingVertical: screenHeight * 0.015,
-    paddingHorizontal: screenWidth * 0.08,
-    borderRadius: screenWidth * 0.03,
-  },
-  addActivityText: {
-    fontFamily: "ArimaMadurai_700Bold",
-    color: "#fff",
-    fontSize: screenWidth * 0.04,
   },
   activityLocation: {
     fontFamily: "ArimaMadurai_400Regular",
