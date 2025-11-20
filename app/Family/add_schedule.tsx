@@ -33,6 +33,13 @@ interface Driver {
 
 const THEME_COLOR = "#04302B";
 
+type LinkedElder = {
+  id: string;
+  name: string;
+  relation?: string;
+  phone?: string;
+};
+
 const AddSchedule = () => {
   const router = useRouter();
   const {
@@ -66,6 +73,10 @@ const AddSchedule = () => {
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [driversLoading, setDriversLoading] = useState(false);
   const [driverModalVisible, setDriverModalVisible] = useState(false);
+  const [linkedElders, setLinkedElders] = useState<LinkedElder[]>([]);
+  const [selectedElder, setSelectedElder] = useState<LinkedElder | null>(null);
+  const [elderModalVisible, setElderModalVisible] = useState(false);
+  const [linkedEldersLoading, setLinkedEldersLoading] = useState(false);
 
   const [date, setDate] = useState(
     selectedDate ? new Date(selectedDate as string) : new Date()
@@ -77,6 +88,10 @@ const AddSchedule = () => {
     const nameParts = [driver.firstName, driver.lastName].filter(Boolean).join(" ").trim();
     if (nameParts.length > 0) return nameParts;
     return driver.phoneNumber || "Driver";
+  };
+  const getElderDisplayName = (elder?: LinkedElder | null) => {
+    if (!elder) return "Select Elder";
+    return elder.name || elder.relation || "Elder";
   };
 
   // Load user data and schedules (used for driver availability + editing)
@@ -134,6 +149,41 @@ const AddSchedule = () => {
       }
     };
     fetchDrivers();
+  }, [user]);
+
+  useEffect(() => {
+    const fetchLinkedElders = async () => {
+      if (!user || user.role !== 'family') return;
+      try {
+        setLinkedEldersLoading(true);
+        const response = await apiGet<{ members: any[] }>('/family?linked=me');
+        const members = response.members || [];
+        const mapped: LinkedElder[] = members
+          .map((member) => {
+            const elder = member.elderId;
+            const elderId = typeof elder === 'object' && elder?._id ? elder._id : elder;
+            if (!elderId) return null;
+            const elderName =
+              elder?.firstName || elder?.lastName
+                ? [elder?.firstName, elder?.lastName].filter(Boolean).join(' ').trim()
+                : member.relation || member.name || 'Elder';
+            return {
+              id: elderId,
+              name: elderName,
+              relation: member.relation,
+              phone: elder?.phoneNumber,
+            };
+          })
+          .filter(Boolean) as LinkedElder[];
+        setLinkedElders(mapped);
+        setSelectedElder((current) => current || mapped[0] || null);
+      } catch (error) {
+        console.error('Error loading linked elders:', error);
+      } finally {
+        setLinkedEldersLoading(false);
+      }
+    };
+    fetchLinkedElders();
   }, [user]);
 
   // Filter drivers that are available for selected date/time
@@ -241,83 +291,116 @@ const AddSchedule = () => {
 
     setLoading(true);
 
-    try {
-      // Format date for backend (YYYY-MM-DD) - use local date to avoid timezone issues
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const formattedDate = `${year}-${month}-${day}`;
-      
-      // Determine elderId and familyId based on user role
-      let elderId = user._id;
-      let familyId = user._id;
-      
-      // If user is family member, we need to get the elder they're associated with
-      // For now, using the same user ID (you can update this based on your family relationship logic)
-      if (user.role === 'family') {
-        // In a real app, you'd get the elder ID from family relationships
-        // For now, using the same ID (you may need to add a family relationship model)
-        elderId = user._id;
-        familyId = user._id;
-      } else if (user.role === 'elder') {
-        // Elder creating their own schedule
-        elderId = user._id;
-        // You might want to get familyId from family relationships
-        familyId = user._id;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const formattedDate = `${year}-${month}-${day}`;
+    
+    let elderId = user._id;
+    let familyId = user._id;
+
+    if (user.role === 'family') {
+      if (!selectedElder) {
+        Alert.alert("Error", "Please select which elder this schedule is for.");
+        setLoading(false);
+        return;
       }
-
-      const driverName = getDriverDisplayName(selectedDriver);
-
-      // Save or update to backend
-      if (isEditMode && scheduleIdForEdit) {
-        // Update existing schedule
-        await apiPut(`/schedules/${scheduleIdForEdit}`, {
-          title,
-          date: formattedDate,
-          time,
-          fromLocation,
-          toLocation,
-          driverId: selectedDriver._id,
-          driverName,
-          driverPhone: selectedDriver.phoneNumber,
-        });
-        Alert.alert("Success", "Event updated successfully!");
-      } else {
-        // Create new schedule
-        await apiPost('/schedules', {
-          elderId,
-          familyId,
-          title,
-          date: formattedDate,
-          time,
-          fromLocation,
-          toLocation,
-          driverId: selectedDriver._id,
-          driverName,
-          driverPhone: selectedDriver.phoneNumber,
-        });
-        Alert.alert("Success", "Event saved successfully!");
-      }
-
-      // Emit event for local updates
-      scheduleEventEmitter.emit("eventAdded", {
-        title,
-        time,
-        date: date.toDateString(),
-        driver: driverName,
-        location: `${fromLocation} → ${toLocation}`,
-      });
-
-      setLoading(false);
-      router.back();
-    } catch (error: any) {
-      setLoading(false);
-      console.error('Error saving schedule:', error);
-      Alert.alert(
-        "Error",
-        error.message || "Failed to save event. Please try again."
-      );
+      elderId = selectedElder.id;
     }
+
+    const driverName = getDriverDisplayName(selectedDriver);
+
+    const elderIdStr = elderId?.toString();
+
+    const hasConflict = allSchedules.some((schedule: any) => {
+      if (!schedule.date || !schedule.time) return false;
+      const scheduleDate = new Date(schedule.date);
+      const scheduleDateKey = scheduleDate.toISOString().split('T')[0];
+      const targetDateKey = formattedDate;
+      const sameDate = scheduleDateKey === targetDateKey;
+      const sameTime = schedule.time === time;
+      let scheduleElderId = schedule.elderId;
+      if (scheduleElderId && typeof scheduleElderId === 'object' && scheduleElderId._id) {
+        scheduleElderId = scheduleElderId._id;
+      }
+      const sameElder =
+        (scheduleElderId && scheduleElderId.toString() === elderIdStr) ||
+        (!scheduleElderId && user.role !== 'family');
+      return sameDate && sameTime && sameElder;
+    });
+
+    const saveSchedule = async () => {
+      try {
+        if (isEditMode && scheduleIdForEdit) {
+          await apiPut(`/schedules/${scheduleIdForEdit}`, {
+            title,
+            date: formattedDate,
+            time,
+            fromLocation,
+            toLocation,
+            elderId,
+            familyId,
+            driverId: selectedDriver._id,
+            driverName,
+            driverPhone: selectedDriver.phoneNumber,
+          });
+          Alert.alert("Success", "Event updated successfully!");
+        } else {
+          await apiPost('/schedules', {
+            elderId,
+            familyId,
+            title,
+            date: formattedDate,
+            time,
+            fromLocation,
+            toLocation,
+            driverId: selectedDriver._id,
+            driverName,
+            driverPhone: selectedDriver.phoneNumber,
+          });
+          Alert.alert("Success", "Event saved successfully!");
+        }
+
+        scheduleEventEmitter.emit("eventAdded", {
+          title,
+          time,
+          date: date.toDateString(),
+          driver: driverName,
+          location: `${fromLocation} → ${toLocation}`,
+        });
+
+        setLoading(false);
+        router.back();
+      } catch (error: any) {
+        setLoading(false);
+        console.error('Error saving schedule:', error);
+        Alert.alert(
+          "Error",
+          error.message || "Failed to save event. Please try again."
+        );
+      }
+    };
+
+    if (hasConflict) {
+      setLoading(false);
+      Alert.alert(
+        "Schedule Conflict",
+        "There is already an event at this time. Do you want to continue?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Proceed",
+            onPress: () => {
+              setLoading(true);
+              saveSchedule();
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    await saveSchedule();
   };
 
   // ✅ Format time
@@ -411,6 +494,39 @@ const AddSchedule = () => {
         placeholderTextColor="#7b7b7b"
       />
 
+      {user?.role === 'family' && (
+        <View style={styles.selectorWrapper}>
+          <Text style={styles.label}>Elder</Text>
+          <TouchableOpacity
+            style={styles.driverSelector}
+            onPress={() => {
+              if (linkedElders.length > 0) {
+                setElderModalVisible(true);
+              } else {
+                Alert.alert("No Elder Linked", "Please ensure an elder has added you as a family member.");
+              }
+            }}
+          >
+            <Text
+              style={
+                selectedElder ? styles.driverValue : styles.driverPlaceholder
+              }
+            >
+              {getElderDisplayName(selectedElder)}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={THEME_COLOR} />
+          </TouchableOpacity>
+          {linkedEldersLoading && (
+            <ActivityIndicator size="small" color={THEME_COLOR} style={{ marginTop: 8 }} />
+          )}
+          {!linkedEldersLoading && linkedElders.length === 0 && (
+            <Text style={styles.helperText}>
+              Ask an elder to add you in Settings → Add Family.
+            </Text>
+          )}
+        </View>
+      )}
+
       <View style={styles.selectorWrapper}>
         <Text style={styles.label}>Driver</Text>
         <TouchableOpacity
@@ -486,6 +602,45 @@ const AddSchedule = () => {
             <TouchableOpacity
               style={styles.modalCloseButton}
               onPress={() => setDriverModalVisible(false)}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={elderModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setElderModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Elder</Text>
+            <ScrollView style={styles.modalList}>
+              {linkedElders.map((elderOption) => (
+                <TouchableOpacity
+                  key={elderOption.id}
+                  style={styles.modalDriverCard}
+                  onPress={() => {
+                    setSelectedElder(elderOption);
+                    setElderModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalDriverName}>{elderOption.name}</Text>
+                  {elderOption.relation && (
+                    <Text style={styles.modalDriverPhone}>{elderOption.relation}</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+              {!linkedEldersLoading && linkedElders.length === 0 && (
+                <Text style={styles.modalEmptyText}>No elders linked to this account.</Text>
+              )}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setElderModalVisible(false)}
             >
               <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
