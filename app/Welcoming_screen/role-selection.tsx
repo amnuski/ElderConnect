@@ -5,7 +5,7 @@ import {
 } from "@expo-google-fonts/arima-madurai";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -18,6 +18,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { apiGet } from "@/services/api";
 
 const { width } = Dimensions.get("window");
 // Width used for snapping between cards: card width (0.56w) + horizontal margins (0.1w)
@@ -30,6 +32,7 @@ export default function RoleSelectionScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const buttonOpacity = useRef(new Animated.Value(0)).current;
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [checkingRole, setCheckingRole] = useState(true);
 
   // Animated value for checkmark
   const checkAnim = useRef(new Animated.Value(0)).current;
@@ -39,10 +42,75 @@ export default function RoleSelectionScreen() {
     ArimaMadurai_700Bold,
   });
 
-  if (!fontsLoaded) {
+  // Check if user already has a role - if yes, redirect to their dashboard
+  useEffect(() => {
+    const checkExistingRole = async () => {
+      try {
+        setCheckingRole(true);
+        
+        // First check AsyncStorage
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          console.log('[ROLE SELECTION] User from AsyncStorage:', user);
+          
+          // If user already has a role, redirect to their dashboard immediately
+          if (user && user.role && user.role.trim() !== '') {
+            console.log('[ROLE SELECTION] User has role:', user.role, '- Redirecting to dashboard');
+            switch (user.role.toLowerCase()) {
+              case 'elder':
+              case 'family':
+                router.replace('/Family/dash');
+                return;
+              case 'driver':
+                router.replace('/Driver/Driver-dash');
+                return;
+            }
+          }
+        }
+        
+        // Also check from API to ensure we have latest data from database
+        try {
+          const response = await apiGet<{ user: any }>('/users/me');
+          console.log('[ROLE SELECTION] User from API:', response.user);
+          
+          if (response.user && response.user.role && response.user.role.trim() !== '') {
+            await AsyncStorage.setItem('user', JSON.stringify(response.user));
+            console.log('[ROLE SELECTION] User has role from API:', response.user.role, '- Redirecting to dashboard');
+            switch (response.user.role.toLowerCase()) {
+              case 'elder':
+              case 'family':
+                router.replace('/Family/dash');
+                return;
+              case 'driver':
+                router.replace('/Driver/Driver-dash');
+                return;
+            }
+          }
+        } catch (apiError: any) {
+          // API might fail if not authenticated, continue with role selection
+          console.log('[ROLE SELECTION] API check failed (user might not be authenticated yet):', apiError?.message);
+        }
+        
+        // If we reach here, user has no role - show role selection screen
+        console.log('[ROLE SELECTION] User has no role - showing role selection');
+        setCheckingRole(false);
+      } catch (error) {
+        console.error('[ROLE SELECTION] Error checking user role:', error);
+        // Continue with role selection if check fails
+        setCheckingRole(false);
+      }
+    };
+    checkExistingRole();
+  }, []);
+
+  if (!fontsLoaded || checkingRole) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#FFFFFF" }}>
         <ActivityIndicator size="large" color="#042222" />
+        <Text style={{ marginTop: 10, color: "#042222", fontFamily: "ArimaMadurai_400Regular" }}>
+          Checking account...
+        </Text>
       </View>
     );
   }

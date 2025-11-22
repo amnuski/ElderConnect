@@ -102,9 +102,21 @@ export default function OtpScreen() {
 
       setLoading(false);
 
-      // Existing user with role should enter their dashboard immediately.
-      if (response.user && response.user.role) {
-        switch (response.user.role) {
+      // Check if phoneNumber exists in database with role (using phoneNumber as primary key)
+      // If user has role → existing account → go to dashboard immediately
+      // If user has no role → new account → go to role selection
+      console.log('[OTP VERIFY] User data received:', {
+        phoneNumber: response.user?.phoneNumber,
+        role: response.user?.role,
+        hasRole: !!(response.user && response.user.role && response.user.role.trim() !== '')
+      });
+      
+      if (response.user && response.user.role && response.user.role.trim() !== '') {
+        // Phone number already registered with role → existing account → go to dashboard
+        const role = response.user.role.toLowerCase();
+        console.log('[OTP VERIFY] Existing user with role:', role, 'Phone:', response.user.phoneNumber, '- Redirecting to dashboard');
+        
+        switch (role) {
           case 'elder':
           case 'family':
             router.replace('/Family/dash');
@@ -113,10 +125,12 @@ export default function OtpScreen() {
             router.replace('/Driver/Driver-dash');
             break;
           default:
+            console.log('[OTP VERIFY] Unknown role:', role, '- Going to role selection');
             router.replace('/Welcoming_screen/role-selection');
         }
       } else {
-        // Brand new phone number (no role yet) → go to role selection.
+        // Phone number not in database OR no role → new account → go to role selection
+        console.log('[OTP VERIFY] New phone number or no role. Phone:', response.user?.phoneNumber, '- Going to role selection');
         router.replace('/Welcoming_screen/role-selection');
       }
     } catch (error: any) {

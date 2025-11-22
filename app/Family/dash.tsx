@@ -2,7 +2,7 @@
 import { ArimaMadurai_400Regular, ArimaMadurai_700Bold, useFonts } from "@expo-google-fonts/arima-madurai";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Dimensions,
   Image,
@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Footer from "../Footer/footer";
@@ -32,6 +33,10 @@ interface Activity {
   date: string;
   fromLocation?: string;
   toLocation?: string;
+  driverId?: string;
+  driverName?: string;
+  driverPhone?: string;
+  status?: string;
 }
 
 export default function Dashboard() {
@@ -43,19 +48,39 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [lastRideStatuses, setLastRideStatuses] = useState<Map<string, string>>(new Map());
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+  const [lastRideStatusesMap, setLastRideStatusesMap] = useState<Map<string, string>>(new Map());
+  const lastFetchTimeRef = useRef<number>(0);
+  const FETCH_COOLDOWN = 2000; // 2 seconds cooldown between fetches
 
   let [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
 
-  // Load user data
+  // Load user data from database
   useEffect(() => {
     const loadUser = async () => {
       try {
+        // First try to get from AsyncStorage
         const userStr = await AsyncStorage.getItem('user');
         if (userStr) {
-          setUser(JSON.parse(userStr));
+          const userData = JSON.parse(userStr);
+          setUser(userData);
+        }
+        
+        // Also fetch latest from API to ensure we have current data from database
+        try {
+          const response = await apiGet<{ user: any }>('/users/me');
+          if (response.user) {
+            setUser(response.user);
+            await AsyncStorage.setItem('user', JSON.stringify(response.user));
+          }
+        } catch (apiError) {
+          console.error('Error fetching user from API:', apiError);
+          // Continue with AsyncStorage data if API fails
         }
       } catch (error) {
         console.error('Error loading user:', error);
@@ -64,12 +89,76 @@ export default function Dashboard() {
     loadUser();
   }, []);
 
-  // Fetch schedules from backend
+  // Fetch schedules and check ride status changes
   const fetchSchedules = async () => {
     try {
       if (!user) return;
+      
+      // Rate limiting: Don't fetch if last fetch was too recent
+      const now = Date.now();
+      if (now - lastFetchTimeRef.current < FETCH_COOLDOWN) {
+        console.log('Skipping fetch - too soon after last fetch');
+        return;
+      }
+      lastFetchTimeRef.current = now;
 
       const response = await apiGet<{ schedules: any[] }>('/schedules');
+      
+      // Also fetch rides to check for pickup confirmation (only if needed)
+      try {
+        const ridesResponse = await apiGet<{ rides: any[] }>('/api/rides');
+        const rides = ridesResponse.rides || [];
+        
+        // Check for rides that changed from accepted to in_progress (pickup confirmed)
+        rides.forEach((ride: any) => {
+          const lastStatus = lastRideStatusesMap.get(ride._id);
+          if (lastStatus === 'accepted' && ride.status === 'in_progress') {
+            // Pickup confirmed - show notification and auto-open track ride
+            const notification = {
+              id: `pickup-confirmed-${ride._id}-${Date.now()}`,
+              type: 'pickup',
+              title: '🚗 Pickup Confirmed',
+              message: `Driver has confirmed pickup. You can now track the ride.`,
+              rideId: ride._id,
+              scheduleId: ride.scheduleId,
+              timestamp: new Date(),
+            };
+            setNotifications(prev => [notification, ...prev].slice(0, 50));
+            
+            Alert.alert(
+              "🚗 Pickup Confirmed",
+              "Driver has confirmed pickup. Opening track ride...",
+              [
+                {
+                  text: "Track Ride",
+                  onPress: () => {
+                    router.push('/Family/track-ride');
+                  }
+                },
+                { text: "OK", style: "cancel" }
+              ]
+            );
+            
+            // Auto-open track ride after a short delay
+            setTimeout(() => {
+              router.push('/Family/track-ride');
+            }, 1000);
+          }
+        });
+        
+        // Update last ride statuses
+        const newRideStatusMap = new Map<string, string>();
+        rides.forEach((ride: any) => {
+          newRideStatusMap.set(ride._id, ride.status);
+        });
+        setLastRideStatusesMap(newRideStatusMap);
+      } catch (ridesError: any) {
+        console.error('Error fetching rides:', ridesError);
+        // Don't show alert for rate limiting in background fetch
+        if (ridesError.status === 429) {
+          console.warn('Rate limit reached for rides fetch, will retry later');
+        }
+      }
       
       // Filter today's schedules - normalize dates for comparison
       const today = new Date();
@@ -101,6 +190,10 @@ export default function Dashboard() {
           date: schedule.date,
           fromLocation: schedule.fromLocation,
           toLocation: schedule.toLocation,
+          driverId: schedule.driverId,
+          driverName: schedule.driverName,
+          driverPhone: schedule.driverPhone,
+          status: schedule.status,
         }))
         .sort((a, b) => {
           // Sort by time - handle both 12-hour and 24-hour format
@@ -108,6 +201,159 @@ export default function Dashboard() {
           const timeB = b.time.toLowerCase().replace(/\s*(am|pm)/, '');
           return timeA.localeCompare(timeB);
         });
+
+      // Check for ride status changes and show notifications
+      if (lastRideStatuses.size > 0) {
+        todaySchedules.forEach((schedule: Activity) => {
+          const lastStatusKey = lastRideStatuses.get(schedule._id);
+          const currentStatus = schedule.status || 'pending';
+          const currentStatusKey = schedule.driverId 
+            ? `${currentStatus}-${schedule.driverId}` 
+            : `${currentStatus}-no-driver`;
+          
+          // Extract status and driver info from keys
+          const lastStatus = lastStatusKey ? lastStatusKey.split('-')[0] : null;
+          const lastHadDriver = lastStatusKey && lastStatusKey.includes('-') && !lastStatusKey.endsWith('-no-driver');
+          const currentHasDriver = !!schedule.driverId;
+          
+          // Only show notification if status changed
+          if (lastStatusKey && lastStatusKey !== currentStatusKey) {
+            // Check if driver was cleared (had driver before, no driver now)
+            const driverWasCleared = lastHadDriver && !currentHasDriver && currentStatus === 'pending';
+            
+            // If driver was cleared, it means driver declined
+            if (driverWasCleared) {
+              // Driver declined - get driver name from lastStatusKey or schedule
+              const lastDriverId = lastStatusKey.split('-')[1];
+              const driverName = schedule.driverName || 'Driver';
+              
+              const notification = {
+                id: `${schedule._id}-declined-${Date.now()}`,
+                type: 'declined',
+                title: '❌ Ride Declined',
+                message: `Driver ${driverName} has declined your ride request for "${schedule.title}" (${schedule.time}). Please edit the schedule to select another driver.`,
+                scheduleId: schedule._id,
+                timestamp: new Date(),
+              };
+              setNotifications(prev => [notification, ...prev].slice(0, 50));
+              
+              Alert.alert(
+                "❌ Ride Declined",
+                `Driver ${driverName} has declined your ride request for "${schedule.title}" (${schedule.time}).\n\nYou can edit the schedule to select another driver.`,
+                [
+                  { text: "OK", style: "cancel" },
+                  {
+                    text: "Edit Schedule",
+                    onPress: () => {
+                      try {
+                        const activityDate = new Date(schedule.date);
+                        router.push({
+                          pathname: "/Family/add_schedule",
+                          params: {
+                            selectedDate: activityDate.toISOString(),
+                            editMode: "true",
+                            scheduleId: schedule._id,
+                            title: schedule.title || "",
+                            time: schedule.time || "",
+                            fromLocation: schedule.fromLocation || "",
+                            toLocation: schedule.toLocation || "",
+                          },
+                        });
+                      } catch (error) {
+                        console.error('Error navigating to edit:', error);
+                      }
+                    }
+                  }
+                ]
+              );
+            } else if (lastStatus === 'pending' && currentStatus === 'confirmed') {
+              // Driver accepted - add to notifications
+              const notification = {
+                id: `${schedule._id}-accepted-${Date.now()}`,
+                type: 'accepted',
+                title: '✅ Ride Accepted',
+                message: `Driver ${schedule.driverName} has accepted your ride request for "${schedule.title}" (${schedule.time}).`,
+                scheduleId: schedule._id,
+                timestamp: new Date(),
+              };
+              setNotifications(prev => [notification, ...prev].slice(0, 50)); // Keep last 50
+              
+              Alert.alert(
+                "✅ Ride Accepted",
+                `Driver ${schedule.driverName} has accepted your ride request for "${schedule.title}" (${schedule.time}).`
+              );
+            } else if (lastStatus === 'pending' && currentStatus === 'cancelled') {
+              // Driver declined - add to notifications
+              const notification = {
+                id: `${schedule._id}-declined-${Date.now()}`,
+                type: 'declined',
+                title: '❌ Ride Declined',
+                message: `Driver ${schedule.driverName} has declined your ride request for "${schedule.title}" (${schedule.time}). Please edit the schedule to select another driver.`,
+                scheduleId: schedule._id,
+                timestamp: new Date(),
+              };
+              setNotifications(prev => [notification, ...prev].slice(0, 50));
+              
+              Alert.alert(
+                "❌ Ride Declined",
+                `Driver ${schedule.driverName} has declined your ride request for "${schedule.title}" (${schedule.time}).\n\nYou can edit the schedule to select another driver.`,
+                [
+                  { text: "OK", style: "cancel" },
+                  {
+                    text: "Edit Schedule",
+                    onPress: () => {
+                      try {
+                        const activityDate = new Date(schedule.date);
+                        router.push({
+                          pathname: "/Family/add_schedule",
+                          params: {
+                            selectedDate: activityDate.toISOString(),
+                            editMode: "true",
+                            scheduleId: schedule._id,
+                            title: schedule.title || "",
+                            time: schedule.time || "",
+                            fromLocation: schedule.fromLocation || "",
+                            toLocation: schedule.toLocation || "",
+                          },
+                        });
+                      } catch (error) {
+                        console.error('Error navigating to edit:', error);
+                      }
+                    }
+                  }
+                ]
+              );
+            } else if (currentStatus === 'cancelled' && lastStatus !== 'cancelled') {
+              // Ride cancelled - add to notifications
+              const notification = {
+                id: `${schedule._id}-cancelled-${Date.now()}`,
+                type: 'cancelled',
+                title: '❌ Ride Cancelled',
+                message: `Your ride booking for "${schedule.title}" (${schedule.time}) has been cancelled.`,
+                scheduleId: schedule._id,
+                timestamp: new Date(),
+              };
+              setNotifications(prev => [notification, ...prev].slice(0, 50));
+              
+              Alert.alert(
+                "❌ Ride Cancelled",
+                `Your ride booking for "${schedule.title}" (${schedule.time}) has been cancelled.`
+              );
+            }
+          }
+        });
+      }
+      
+      // Update last seen statuses (track all schedules, including those without drivers)
+      const newStatusMap = new Map<string, string>();
+      todaySchedules.forEach((schedule: Activity) => {
+        // Track status for all schedules (even without drivers)
+        const statusKey = schedule.driverId 
+          ? `${schedule.status || 'pending'}-${schedule.driverId}` 
+          : `${schedule.status || 'pending'}-no-driver`;
+        newStatusMap.set(schedule._id, statusKey);
+      });
+      setLastRideStatuses(newStatusMap);
 
       setActivities(todaySchedules);
     } catch (error: any) {
@@ -170,20 +416,25 @@ export default function Dashboard() {
   };
 
   const handleEditActivity = (activity: Activity) => {
-    const activityDate = new Date(activity.date);
-    router.push({
-      pathname: "/Family/add_schedule",
-      params: {
-        selectedDate: activityDate.toISOString(),
-        editMode: "true",
-        scheduleId: activity._id,
-        title: activity.title,
-        time: activity.time,
-        fromLocation: activity.fromLocation || "",
-        toLocation: activity.toLocation || "",
-      },
-    });
-    setSelectedActivity(null);
+    try {
+      const activityDate = new Date(activity.date);
+      router.push({
+        pathname: "/Family/add_schedule",
+        params: {
+          selectedDate: activityDate.toISOString(),
+          editMode: "true",
+          scheduleId: activity._id,
+          title: activity.title || "",
+          time: activity.time || "",
+          fromLocation: activity.fromLocation || "",
+          toLocation: activity.toLocation || "",
+        },
+      });
+      setSelectedActivity(null);
+    } catch (error) {
+      console.error('Error navigating to edit:', error);
+      Alert.alert("Error", "Failed to open edit screen. Please try again.");
+    }
   };
 
   const handleDeleteActivity = async (activityId: string) => {
@@ -197,13 +448,28 @@ export default function Dashboard() {
           style: "destructive",
           onPress: async () => {
             try {
-              await apiDelete(`/schedules/${activityId}`);
+              setLoading(true);
+              console.log('Deleting schedule:', activityId);
+              const response = await apiDelete(`/schedules/${activityId}`);
+              console.log('Delete response:', response);
+              
               // Remove from local state
               setActivities(prev => prev.filter(a => a._id !== activityId));
               setSelectedActivity(null);
+              
+              // Refresh schedules to ensure consistency
+              if (user) {
+                await fetchSchedules();
+              }
+              
+              Alert.alert("Success", "Activity deleted successfully!");
             } catch (error: any) {
               console.error('Error deleting schedule:', error);
-              Alert.alert("Error", "Failed to delete activity. Please try again.");
+              console.error('Error details:', JSON.stringify(error, null, 2));
+              const errorMessage = error?.data?.message || error?.message || error?.error || "Failed to delete activity. Please try again.";
+              Alert.alert("Error", errorMessage);
+            } finally {
+              setLoading(false);
             }
           },
         },
@@ -245,8 +511,18 @@ export default function Dashboard() {
               )}
             </View>
           </View>
-          <TouchableOpacity style={styles.notificationButton}>
+          <TouchableOpacity 
+            style={styles.notificationButton}
+            onPress={() => setNotificationModalVisible(true)}
+          >
             <Ionicons name="notifications-outline" size={24} color="#04302B" />
+            {notifications.length > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {notifications.length > 99 ? '99+' : notifications.length}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -347,7 +623,10 @@ export default function Dashboard() {
           </View>
 
           {/* Track Ride */}
-          <TouchableOpacity style={styles.trackRideButton}>
+          <TouchableOpacity 
+            style={styles.trackRideButton}
+            onPress={() => router.push('/Family/track-ride')}
+          >
             <Text style={styles.trackRideText}>Track Ride</Text>
           </TouchableOpacity>
 
@@ -377,6 +656,150 @@ export default function Dashboard() {
 
         {/* Footer */}
         <Footer activeTab={activeTab} onTabPress={handleTabPress} />
+
+        {/* Notification Modal */}
+        <Modal
+          visible={notificationModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setNotificationModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Notifications</Text>
+                <TouchableOpacity
+                  onPress={() => setNotificationModalVisible(false)}
+                  style={styles.modalCloseButton}
+                >
+                  <Ionicons name="close" size={24} color="#04302B" />
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView style={styles.notificationsList}>
+                {notifications.length === 0 ? (
+                  <View style={styles.emptyNotifications}>
+                    <Ionicons name="notifications-off-outline" size={48} color="#CCCCCC" />
+                    <Text style={styles.emptyNotificationsText}>No notifications</Text>
+                  </View>
+                ) : (
+                  [...notifications]
+                    .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+                    .map((notification) => (
+                    <View key={notification.id} style={styles.notificationItem}>
+                      <View style={[
+                        styles.notificationIcon,
+                        notification.type === 'accepted' && styles.notificationIconSuccess,
+                        notification.type === 'declined' && styles.notificationIconError,
+                        notification.type === 'cancelled' && styles.notificationIconError,
+                        notification.type === 'pickup' && styles.notificationIconInfo,
+                      ]}>
+                        <Ionicons
+                          name={
+                            notification.type === 'accepted' ? 'checkmark-circle' :
+                            notification.type === 'declined' ? 'close-circle' :
+                            notification.type === 'pickup' ? 'car' :
+                            'alert-circle'
+                          }
+                          size={24}
+                          color="white"
+                        />
+                      </View>
+                      <View style={styles.notificationContent}>
+                        <Text style={styles.notificationItemTitle}>{notification.title}</Text>
+                        <Text style={styles.notificationItemMessage}>{notification.message}</Text>
+                        <Text style={styles.notificationTime}>
+                          {notification.timestamp.toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          })}
+                        </Text>
+                        {notification.type === 'declined' && notification.scheduleId && (
+                          <TouchableOpacity
+                            style={styles.editScheduleButton}
+                            onPress={async () => {
+                              setNotificationModalVisible(false);
+                              try {
+                                // Find the schedule from activities first
+                                let schedule = activities.find(a => a._id === notification.scheduleId);
+                                
+                                // If not found in today's activities, fetch all schedules
+                                if (!schedule) {
+                                  try {
+                                    const response = await apiGet<{ schedules: any[] }>('/schedules');
+                                    schedule = response.schedules?.find((s: any) => s._id === notification.scheduleId);
+                                  } catch (fetchError) {
+                                    console.error('Error fetching schedule:', fetchError);
+                                  }
+                                }
+                                
+                                if (schedule) {
+                                  const activityDate = new Date(schedule.date);
+                                  router.push({
+                                    pathname: "/Family/add_schedule",
+                                    params: {
+                                      selectedDate: activityDate.toISOString(),
+                                      editMode: "true",
+                                      scheduleId: schedule._id,
+                                      title: schedule.title || "",
+                                      time: schedule.time || "",
+                                      fromLocation: schedule.fromLocation || "",
+                                      toLocation: schedule.toLocation || "",
+                                    },
+                                  });
+                                } else {
+                                  // Even if schedule not found, navigate with scheduleId - add_schedule will fetch it
+                                  router.push({
+                                    pathname: "/Family/add_schedule",
+                                    params: {
+                                      editMode: "true",
+                                      scheduleId: notification.scheduleId,
+                                    },
+                                  });
+                                }
+                              } catch (error) {
+                                console.error('Error navigating to edit:', error);
+                                Alert.alert("Error", "Failed to open edit screen. Please try again.");
+                              }
+                            }}
+                          >
+                            <Ionicons name="create-outline" size={16} color="#FFFFFF" />
+                            <Text style={styles.editScheduleButtonText}>Edit & Select Driver</Text>
+                          </TouchableOpacity>
+                        )}
+                        {notification.type === 'pickup' && (
+                          <TouchableOpacity
+                            style={styles.trackRideButtonInModal}
+                            onPress={() => {
+                              setNotificationModalVisible(false);
+                              router.push('/Family/track-ride');
+                            }}
+                          >
+                            <Ionicons name="location" size={16} color="#FFFFFF" />
+                            <Text style={styles.trackRideButtonTextInModal}>Track Ride</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+              
+              {notifications.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearNotificationsButton}
+                  onPress={() => {
+                    setNotifications([]);
+                    Alert.alert("Cleared", "All notifications cleared.");
+                  }}
+                >
+                  <Text style={styles.clearNotificationsText}>Clear All</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </Modal>
       </LinearGradient>
     </SafeAreaView>
   );
@@ -410,6 +833,158 @@ const styles = StyleSheet.create({
     backgroundColor: "#E8F5E8",
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "#FF5722",
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  notificationBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontFamily: "ArimaMadurai_700Bold",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    maxHeight: screenHeight * 0.8,
+    paddingTop: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: screenWidth * 0.05,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+  },
+  modalTitle: {
+    fontSize: screenWidth * 0.06,
+    fontFamily: "ArimaMadurai_700Bold",
+    color: "#04302B",
+  },
+  modalCloseButton: {
+    padding: 5,
+  },
+  notificationsList: {
+    maxHeight: screenHeight * 0.6,
+    paddingHorizontal: screenWidth * 0.05,
+  },
+  notificationItem: {
+    flexDirection: "row",
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  notificationIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  notificationIconSuccess: {
+    backgroundColor: "#4CAF50",
+  },
+  notificationIconError: {
+    backgroundColor: "#F44336",
+  },
+  notificationIconInfo: {
+    backgroundColor: "#2196F3",
+  },
+  notificationContent: {
+    flex: 1,
+  },
+  notificationItemTitle: {
+    fontSize: screenWidth * 0.045,
+    fontFamily: "ArimaMadurai_700Bold",
+    color: "#04302B",
+    marginBottom: 4,
+  },
+  notificationItemMessage: {
+    fontSize: screenWidth * 0.04,
+    fontFamily: "ArimaMadurai_400Regular",
+    color: "#333",
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  notificationTime: {
+    fontSize: screenWidth * 0.035,
+    fontFamily: "ArimaMadurai_400Regular",
+    color: "#999",
+  },
+  emptyNotifications: {
+    alignItems: "center",
+    paddingVertical: screenHeight * 0.1,
+  },
+  emptyNotificationsText: {
+    fontSize: screenWidth * 0.04,
+    fontFamily: "ArimaMadurai_400Regular",
+    color: "#999",
+    marginTop: 10,
+  },
+  clearNotificationsButton: {
+    backgroundColor: "#F44336",
+    marginHorizontal: screenWidth * 0.05,
+    marginVertical: 15,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  clearNotificationsText: {
+    color: "#FFFFFF",
+    fontSize: screenWidth * 0.045,
+    fontFamily: "ArimaMadurai_700Bold",
+  },
+  editScheduleButton: {
+    backgroundColor: "#04302B",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    gap: 6,
+  },
+  editScheduleButtonText: {
+    color: "#FFFFFF",
+    fontSize: screenWidth * 0.04,
+    fontFamily: "ArimaMadurai_700Bold",
+  },
+  trackRideButtonInModal: {
+    backgroundColor: "#2196F3",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    gap: 6,
+  },
+  trackRideButtonTextInModal: {
+    color: "#FFFFFF",
+    fontSize: screenWidth * 0.04,
+    fontFamily: "ArimaMadurai_700Bold",
   },
   content: { flex: 1 },
   contentContainer: { paddingHorizontal: screenWidth * 0.05, paddingBottom: screenHeight * 0.15 },

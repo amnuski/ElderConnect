@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Image,
@@ -9,36 +9,120 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
+import { apiGet, apiPut, ApiError } from "@/services/api";
 
-// ✅ Ride type
+// ✅ Ride type matching backend schema
 interface Ride {
-  id: number;
-  pickup: string;
-  drop: string;
-  time: string;
-  status: "Pending" | "Accepted";
+  _id: string;
+  scheduleId: string;
+  elderId: string;
+  driverId: string;
+  familyId: string;
+  pickupLocation: string;
+  dropLocation: string;
+  scheduledTime: string;
+  status: "pending" | "accepted" | "in_progress" | "completed" | "cancelled";
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface RidesResponse {
+  rides: Ride[];
 }
 
 export default function DriverResponseScreen() {
-  const [rides, setRides] = useState<Ride[]>([
-    { id: 1, pickup: "Station Road", drop: "University", time: "10:30 AM", status: "Pending" },
-    { id: 2, pickup: "Market", drop: "Hospital", time: "11:00 AM", status: "Pending" },
-  ]);
+  const [rides, setRides] = useState<Ride[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState<string | null>(null);
 
-  // ✅ Typed id parameter
-  const handleAccept = (id: number) => {
-    setRides((prevRides) =>
-      prevRides.map((ride) =>
-        ride.id === id ? { ...ride, status: "Accepted" } : ride
-      )
-    );
-    Alert.alert("Ride Accepted ✅", "You have accepted the ride.");
+  // Fetch rides from API
+  useEffect(() => {
+    fetchRides();
+  }, []);
+
+  const fetchRides = async () => {
+    try {
+      setLoading(true);
+      const response = await apiGet<RidesResponse>("/api/rides?status=pending");
+      setRides(response.rides || []);
+    } catch (error) {
+      const apiError = error as ApiError;
+      Alert.alert(
+        "Error",
+        apiError.message || "Failed to fetch rides. Please try again."
+      );
+      console.error("Error fetching rides:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDecline = (id: number) => {
-    setRides((prevRides) => prevRides.filter((ride) => ride.id !== id));
-    Alert.alert("Ride Declined ❌", "You have declined the ride.");
+  // ✅ Accept ride function
+  const handleAccept = async (rideId: string) => {
+    try {
+      setProcessing(rideId);
+      const response = await apiPut<{ message: string; ride: Ride }>(
+        `/api/rides/${rideId}/accept`
+      );
+      
+      // Update local state
+      setRides((prevRides) =>
+        prevRides.map((ride) =>
+          ride._id === rideId ? { ...ride, status: "accepted" } : ride
+        )
+      );
+      
+      Alert.alert("Ride Accepted ✅", response.message || "You have accepted the ride.");
+    } catch (error) {
+      const apiError = error as ApiError;
+      Alert.alert(
+        "Error",
+        apiError.message || "Failed to accept ride. Please try again."
+      );
+      console.error("Error accepting ride:", error);
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  // ✅ Decline ride function
+  const handleDecline = async (rideId: string) => {
+    try {
+      setProcessing(rideId);
+      const response = await apiPut<{ message: string; ride: Ride }>(
+        `/api/rides/${rideId}/decline`
+      );
+      
+      // Remove from local state
+      setRides((prevRides) => prevRides.filter((ride) => ride._id !== rideId));
+      
+      Alert.alert("Ride Declined ❌", response.message || "You have declined the ride.");
+    } catch (error) {
+      const apiError = error as ApiError;
+      Alert.alert(
+        "Error",
+        apiError.message || "Failed to decline ride. Please try again."
+      );
+      console.error("Error declining ride:", error);
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  // Format time for display
+  const formatTime = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return dateString;
+    }
   };
 
   return (
@@ -57,30 +141,63 @@ export default function DriverResponseScreen() {
       </View>
 
       <ScrollView style={styles.rideList}>
-        {rides.length === 0 ? (
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#0a3d2e" />
+            <Text style={styles.loadingText}>Loading rides...</Text>
+          </View>
+        ) : rides.length === 0 ? (
           <Text style={styles.noRides}>No ride requests available</Text>
         ) : (
           rides.map((ride) => (
-            <View key={ride.id} style={styles.rideCard}>
-              <Text style={styles.rideTitle}>Ride</Text>
-              <Text>Pickup Location : {ride.pickup}</Text>
-              <Text>Drop Location : {ride.drop}</Text>
-              <Text>Time : {ride.time}</Text>
-              <Text>Status : {ride.status}</Text>
+            <View key={ride._id} style={styles.rideCard}>
+              <Text style={styles.rideTitle}>Ride Request</Text>
+              <Text style={styles.rideInfo}>
+                <Text style={styles.label}>Pickup Location: </Text>
+                {ride.pickupLocation}
+              </Text>
+              <Text style={styles.rideInfo}>
+                <Text style={styles.label}>Drop Location: </Text>
+                {ride.dropLocation}
+              </Text>
+              <Text style={styles.rideInfo}>
+                <Text style={styles.label}>Scheduled Time: </Text>
+                {formatTime(ride.scheduledTime)}
+              </Text>
+              <Text style={styles.rideInfo}>
+                <Text style={styles.label}>Status: </Text>
+                <Text style={styles.statusText}>{ride.status.toUpperCase()}</Text>
+              </Text>
 
-              {ride.status === "Pending" && (
+              {ride.status === "pending" && (
                 <View style={styles.buttonRow}>
                   <TouchableOpacity
-                    style={styles.acceptButton}
-                    onPress={() => handleAccept(ride.id)}
+                    style={[
+                      styles.acceptButton,
+                      processing === ride._id && styles.buttonDisabled,
+                    ]}
+                    onPress={() => handleAccept(ride._id)}
+                    disabled={processing === ride._id}
                   >
-                    <Text style={styles.buttonText}>Accept</Text>
+                    {processing === ride._id ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <Text style={styles.buttonText}>Accept</Text>
+                    )}
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.declineButton}
-                    onPress={() => handleDecline(ride.id)}
+                    style={[
+                      styles.declineButton,
+                      processing === ride._id && styles.buttonDisabled,
+                    ]}
+                    onPress={() => handleDecline(ride._id)}
+                    disabled={processing === ride._id}
                   >
-                    <Text style={styles.buttonText}>Decline</Text>
+                    {processing === ride._id ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <Text style={styles.buttonText}>Decline</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               )}
@@ -134,5 +251,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   buttonText: { color: "white", fontWeight: "bold" },
+  buttonDisabled: { opacity: 0.6 },
   noRides: { textAlign: "center", marginTop: 50, fontSize: 16, color: "#666" },
+  loadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 50,
+  },
+  loadingText: { marginTop: 10, fontSize: 16, color: "#666" },
+  rideInfo: { marginBottom: 8, fontSize: 14, color: "#333" },
+  label: { fontWeight: "600", color: "#0a3d2e" },
+  statusText: { 
+    fontWeight: "bold", 
+    color: "#0a3d2e",
+    textTransform: "capitalize",
+  },
 });

@@ -53,6 +53,8 @@ const AddSchedule = () => {
   } = useLocalSearchParams();
   const resolvedScheduleId = Array.isArray(scheduleId) ? scheduleId[0] : scheduleId;
   const resolvedEditMode = Array.isArray(editMode) ? editMode[0] : editMode;
+  
+  console.log('AddSchedule - Edit Mode:', resolvedEditMode, 'Schedule ID:', resolvedScheduleId);
 
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
@@ -73,6 +75,8 @@ const AddSchedule = () => {
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [driversLoading, setDriversLoading] = useState(false);
   const [driverModalVisible, setDriverModalVisible] = useState(false);
+  const [driverRides, setDriverRides] = useState<Map<string, any[]>>(new Map());
+  const [busyDrivers, setBusyDrivers] = useState<Set<string>>(new Set());
   const [linkedElders, setLinkedElders] = useState<LinkedElder[]>([]);
   const [selectedElder, setSelectedElder] = useState<LinkedElder | null>(null);
   const [elderModalVisible, setElderModalVisible] = useState(false);
@@ -81,6 +85,21 @@ const AddSchedule = () => {
   const [date, setDate] = useState(
     selectedDate ? new Date(selectedDate as string) : new Date()
   );
+  // Initialize with minimum time (current time + 30 minutes)
+  const getMinimumTime = () => {
+    const now = new Date();
+    const minTime = new Date(now.getTime() + 30 * 60 * 1000); // 30 minutes from now
+    // Round up to next 5 minutes for better UX
+    const minutes = minTime.getMinutes();
+    const roundedMinutes = Math.ceil(minutes / 5) * 5;
+    minTime.setMinutes(roundedMinutes);
+    if (roundedMinutes >= 60) {
+      minTime.setHours(minTime.getHours() + 1);
+      minTime.setMinutes(0);
+    }
+    return minTime;
+  };
+  const [selectedTime, setSelectedTime] = useState<Date>(getMinimumTime());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const getDriverDisplayName = (driver?: Driver | null) => {
@@ -110,6 +129,7 @@ const AddSchedule = () => {
         if (isEditMode && scheduleIdForEdit) {
           const schedule = schedulesData.find((s: any) => s._id === scheduleIdForEdit);
           if (schedule) {
+            console.log('Loading schedule for edit:', schedule);
             setTitle(schedule.title || "");
             setTime(schedule.time || "");
             setFromLocation(schedule.fromLocation || "");
@@ -117,30 +137,81 @@ const AddSchedule = () => {
             if (schedule.date) {
               setDate(new Date(schedule.date));
             }
+            // Parse time string to Date object for time picker
+            // This allows user to select any time when editing
+            if (schedule.time) {
+              try {
+                const timeMatch = schedule.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+                if (timeMatch) {              
+                  let hour = parseInt(timeMatch[1]);
+                  const minutes = parseInt(timeMatch[2]);
+                  const period = timeMatch[3].toUpperCase();
+                  if (period === 'PM' && hour !== 12) hour += 12;
+                  if (period === 'AM' && hour === 12) hour = 0;
+                  
+                  const timeDate = new Date();
+                  timeDate.setHours(hour, minutes, 0, 0);
+                  setSelectedTime(timeDate);
+                }
+              } catch (error) {
+                console.error('Error parsing time:', error);
+              }
+            }
             if (schedule.driverId) {
               setSelectedDriver({
                 _id: schedule.driverId,
                 firstName: schedule.driverName,
                 phoneNumber: schedule.driverPhone,
               });
+            } else {
+              // Driver was declined/cleared - allow selecting new driver
+              setSelectedDriver(null);
             }
+          } else {
+            console.error('Schedule not found for edit:', scheduleIdForEdit);
+            Alert.alert("Error", "Schedule not found. Please try again.");
+            router.back();
           }
         }
       } catch (error) {
         console.error('Error loading data:', error);
+        if (isEditMode) {
+          Alert.alert("Error", "Failed to load schedule data. Please try again.");
+        }
       }
     };
     loadData();
   }, [isEditMode, scheduleIdForEdit]);
 
-  // Load available drivers
+  // Load available drivers and their active rides
   useEffect(() => {
     const fetchDrivers = async () => {
       if (!user) return;
       try {
         setDriversLoading(true);
         const response = await apiGet<{ drivers: Driver[] }>('/drivers');
-        setDrivers(response.drivers || []);
+        const driversList = response.drivers || [];
+        setDrivers(driversList);
+        
+        // Fetch active rides for each driver
+        const ridesMap = new Map<string, any[]>();
+        for (const driver of driversList) {
+          try {
+            const ridesResponse = await apiGet<{ rides: any[] }>(
+              `/api/rides?driverId=${driver._id}&status=in_progress,accepted`
+            );
+            const activeRides = (ridesResponse.rides || []).filter(
+              (ride: any) => 
+                ride.status === 'in_progress' || 
+                ride.status === 'accepted' ||
+                (ride.status === 'pending' && new Date(ride.scheduledTime) <= new Date())
+            );
+            ridesMap.set(driver._id, activeRides);
+          } catch (error) {
+            console.error(`Error fetching rides for driver ${driver._id}:`, error);
+          }
+        }
+        setDriverRides(ridesMap);
       } catch (error) {
         console.error('Error fetching drivers:', error);
         Alert.alert("Error", "Failed to load drivers. Please try again.");
@@ -198,7 +269,7 @@ const AddSchedule = () => {
     }
 
     const currentDateKey = date.toISOString().split('T')[0];
-    const busyDrivers = new Set<string>();
+    const busyDriversSet = new Set<string>();
 
     allSchedules.forEach((schedule: any) => {
       if (!schedule?.driverId) return;
@@ -212,9 +283,11 @@ const AddSchedule = () => {
       const sameTime = time ? schedule.time === time : true;
       const isActiveStatus = !schedule.status || ["pending", "confirmed"].includes(schedule.status);
       if (sameTime && isActiveStatus) {
-        busyDrivers.add(schedule.driverId.toString());
+        busyDriversSet.add(schedule.driverId.toString());
       }
     });
+
+    setBusyDrivers(busyDriversSet);
 
     const filtered = drivers.filter((driver) => {
       const driverId = driver._id?.toString();
@@ -228,8 +301,15 @@ const AddSchedule = () => {
         return false;
       }
 
-      if (busyDrivers.has(driverId)) {
+      // Use local busyDriversSet instead of state busyDrivers to avoid infinite loop
+      if (busyDriversSet.has(driverId)) {
         return false;
+      }
+
+      // Check if driver is currently on a ride (has active rides)
+      const activeRides = driverRides.get(driverId) || [];
+      if (activeRides.length > 0) {
+        return false; // Driver is currently driving
       }
 
       return true;
@@ -240,7 +320,8 @@ const AddSchedule = () => {
     }
 
     setAvailableDrivers(filtered);
-  }, [drivers, allSchedules, date, time, selectedDriver, isEditMode, scheduleIdForEdit]);
+    setBusyDrivers(busyDriversSet);
+  }, [drivers, allSchedules, date, time, selectedDriver, isEditMode, scheduleIdForEdit, driverRides]);
 
   if (!fontsLoaded) {
     return (
@@ -289,6 +370,52 @@ const AddSchedule = () => {
       return;
     }
 
+    // Validate that scheduled time is at least 30 minutes from now
+    try {
+      const scheduleDate = new Date(date);
+      const timeMatch = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (timeMatch) {
+        let hour = parseInt(timeMatch[1]);
+        const minutes = parseInt(timeMatch[2]);
+        const period = timeMatch[3].toUpperCase();
+        if (period === 'PM' && hour !== 12) hour += 12;
+        if (period === 'AM' && hour === 12) hour = 0;
+        
+        scheduleDate.setHours(hour, minutes, 0, 0);
+        
+        const now = new Date();
+        const minScheduledTime = new Date(now.getTime() + 30 * 60 * 1000); // 30 minutes from now
+        
+        if (scheduleDate <= now) {
+          Alert.alert(
+            "Invalid Schedule Time",
+            "Cannot schedule at current time or in the past. Please schedule at least 30 minutes from now."
+          );
+          setLoading(false);
+          return;
+        }
+        
+        if (scheduleDate < minScheduledTime) {
+          const minTimeStr = minScheduledTime.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit', 
+            hour12: true 
+          });
+          Alert.alert(
+            "Invalid Schedule Time",
+            `Please schedule at least 30 minutes from now.\n\nMinimum time: ${minTimeStr}`
+          );
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (timeError) {
+      console.error('Error validating time:', timeError);
+      Alert.alert("Error", "Invalid time format. Please select a valid time.");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     const year = date.getFullYear();
@@ -332,21 +459,30 @@ const AddSchedule = () => {
     const saveSchedule = async () => {
       try {
         if (isEditMode && scheduleIdForEdit) {
-          await apiPut(`/schedules/${scheduleIdForEdit}`, {
+          const updateData: any = {
             title,
             date: formattedDate,
             time,
             fromLocation,
             toLocation,
-            elderId,
-            familyId,
             driverId: selectedDriver._id,
             driverName,
             driverPhone: selectedDriver.phoneNumber,
-          });
-          Alert.alert("Success", "Event updated successfully!");
+          };
+          
+          const response = await apiPut(`/schedules/${scheduleIdForEdit}`, updateData);
+          console.log('Updating schedule:', scheduleIdForEdit, 'with data:', updateData);
+          console.log('Schedule updated successfully:', response);
+          if (selectedDriver) {
+            Alert.alert(
+              "Schedule Updated ✅", 
+              `Schedule updated. Ride status: ${response.schedule?.status === 'pending' ? 'Waiting for driver acceptance' : response.schedule?.status || 'Updated'}.`
+            );
+          } else {
+            Alert.alert("Success", "Event updated successfully!");
+          }
         } else {
-          await apiPost('/schedules', {
+          const createData = {
             elderId,
             familyId,
             title,
@@ -357,8 +493,21 @@ const AddSchedule = () => {
             driverId: selectedDriver._id,
             driverName,
             driverPhone: selectedDriver.phoneNumber,
-          });
-          Alert.alert("Success", "Event saved successfully!");
+          };
+          
+          const response = await apiPost('/schedules', createData);
+          console.log('Schedule created:', response);
+          
+          // Show message about driver acceptance requirement
+          if (selectedDriver) {
+            Alert.alert(
+              "Ride Booking Sent ✅", 
+              `Ride booking has been sent to ${driverName}. Waiting for driver acceptance. You will be notified when the driver responds.`,
+              [{ text: "OK" }]
+            );
+          } else {
+            Alert.alert("Success", "Event saved successfully!");
+          }
         }
 
         scheduleEventEmitter.emit("eventAdded", {
@@ -374,10 +523,9 @@ const AddSchedule = () => {
       } catch (error: any) {
         setLoading(false);
         console.error('Error saving schedule:', error);
-        Alert.alert(
-          "Error",
-          error.message || "Failed to save event. Please try again."
-        );
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        const errorMessage = error?.data?.message || error?.message || error?.error || "Failed to save event. Please try again.";
+        Alert.alert("Error", errorMessage);
       }
     };
 
@@ -436,9 +584,26 @@ const AddSchedule = () => {
           value={date}
           mode="date"
           display="spinner"
+          minimumDate={new Date()} // Cannot select past dates
           onChange={(event, selectedDate) => {
             setShowDatePicker(false);
-            if (selectedDate) setDate(selectedDate);
+            if (selectedDate) {
+              setDate(selectedDate);
+              
+              // If selected date is today, update time to minimum (current time + 30 minutes)
+              const now = new Date();
+              const selectedDateOnly = new Date(selectedDate);
+              selectedDateOnly.setHours(0, 0, 0, 0);
+              const todayOnly = new Date(now);
+              todayOnly.setHours(0, 0, 0, 0);
+              const isToday = selectedDateOnly.getTime() === todayOnly.getTime();
+              
+              if (isToday) {
+                const minTime = getMinimumTime();
+                setSelectedTime(minTime);
+                setTime(formatTime(minTime));
+              }
+            }
           }}
         />
       )}
@@ -456,11 +621,54 @@ const AddSchedule = () => {
       {showTimePicker && (
         <DateTimePicker
           mode="time"
-          value={new Date()}
+          value={selectedTime}
           display="spinner"
-          onChange={(event, selectedTime) => {
-            setShowTimePicker(false);
-            if (selectedTime) setTime(formatTime(selectedTime));
+          onChange={(event, selectedTimeValue) => {
+            if (selectedTimeValue) {
+              // Validate selected time is at least 30 minutes from now (only if date is today)
+              const now = new Date();
+              const minTime = new Date(now.getTime() + 30 * 60 * 1000);
+              
+              // Check if selected date is today
+              const selectedDateOnly = new Date(date);
+              selectedDateOnly.setHours(0, 0, 0, 0);
+              const todayOnly = new Date(now);
+              todayOnly.setHours(0, 0, 0, 0);
+              const isToday = selectedDateOnly.getTime() === todayOnly.getTime();
+              
+              // Create a combined date-time for comparison
+              const selectedDateTime = new Date(date);
+              selectedDateTime.setHours(selectedTimeValue.getHours(), selectedTimeValue.getMinutes(), 0, 0);
+              
+              if (isToday && selectedDateTime < minTime) {
+                setShowTimePicker(false);
+                Alert.alert(
+                  "Invalid Time",
+                  `Please select a time at least 30 minutes from now.\n\nMinimum time: ${formatTime(minTime)}`,
+                  [
+                    {
+                      text: "Set Minimum Time",
+                      onPress: () => {
+                        // Set to minimum time
+                        setSelectedTime(minTime);
+                        setTime(formatTime(minTime));
+                      }
+                    },
+                    {
+                      text: "Cancel",
+                      style: "cancel"
+                    }
+                  ]
+                );
+                return;
+              }
+              
+              setShowTimePicker(false);
+              setSelectedTime(selectedTimeValue);
+              setTime(formatTime(selectedTimeValue));
+            } else {
+              setShowTimePicker(false);
+            }
           }}
         />
       )}
@@ -578,23 +786,61 @@ const AddSchedule = () => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Driver</Text>
             <ScrollView style={styles.modalList}>
-              {availableDrivers.map((driverOption) => (
-                <TouchableOpacity
-                  key={driverOption._id}
-                  style={styles.modalDriverCard}
-                  onPress={() => {
-                    setSelectedDriver(driverOption);
-                    setDriverModalVisible(false);
-                  }}
-                >
-                  <Text style={styles.modalDriverName}>
-                    {getDriverDisplayName(driverOption)}
-                  </Text>
-                  {driverOption.phoneNumber && (
-                    <Text style={styles.modalDriverPhone}>{driverOption.phoneNumber}</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
+              {availableDrivers.map((driverOption) => {
+                const activeRides = driverRides.get(driverOption._id) || [];
+                const isDriving = activeRides.length > 0;
+                const hasConflict = busyDrivers.has(driverOption._id?.toString());
+                
+                return (
+                  <TouchableOpacity
+                    key={driverOption._id}
+                    style={[styles.modalDriverCard, (isDriving || hasConflict) && styles.modalDriverCardDisabled]}
+                    onPress={() => {
+                      if (isDriving) {
+                        Alert.alert(
+                          "Driver Busy",
+                          `${getDriverDisplayName(driverOption)} is currently on a ride. Please select another driver.`
+                        );
+                        return;
+                      }
+                      if (hasConflict) {
+                        Alert.alert(
+                          "Driver Busy",
+                          `${getDriverDisplayName(driverOption)} already has a schedule at this time. Please select another driver.`
+                        );
+                        return;
+                      }
+                      setSelectedDriver(driverOption);
+                      setDriverModalVisible(false);
+                    }}
+                    disabled={isDriving || hasConflict}
+                  >
+                    <View style={styles.modalDriverInfo}>
+                      <Text style={styles.modalDriverName}>
+                        {getDriverDisplayName(driverOption)}
+                      </Text>
+                      {driverOption.phoneNumber && (
+                        <Text style={styles.modalDriverPhone}>{driverOption.phoneNumber}</Text>
+                      )}
+                      {isDriving && (
+                        <Text style={styles.driverStatusText}>
+                          ⚠️ Currently on a ride
+                        </Text>
+                      )}
+                      {hasConflict && !isDriving && (
+                        <Text style={styles.driverStatusText}>
+                          ⚠️ Busy at this time
+                        </Text>
+                      )}
+                      {!isDriving && !hasConflict && (
+                        <Text style={styles.driverAvailableText}>
+                          ✓ Available
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
               {!driversLoading && availableDrivers.length === 0 && (
                 <Text style={styles.modalEmptyText}>No drivers available right now.</Text>
               )}
@@ -791,6 +1037,24 @@ const styles = StyleSheet.create({
     color: "#555",
     fontFamily: "ArimaMadurai_400Regular",
     marginVertical: 12,
+  },
+  modalDriverInfo: {
+    flex: 1,
+  },
+  driverStatusText: {
+    fontSize: 12,
+    fontFamily: "ArimaMadurai_400Regular",
+    color: "#FF6B35",
+    marginTop: 4,
+  },
+  driverAvailableText: {
+    fontSize: 12,
+    fontFamily: "ArimaMadurai_400Regular",
+    color: "#4CAF50",
+    marginTop: 4,
+  },
+  modalDriverCardDisabled: {
+    opacity: 0.6,
   },
   modalCloseButton: {
     backgroundColor: THEME_COLOR,
