@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,14 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiGet } from '@/services/api';
 import {
   useFonts,
   ArimaMadurai_400Regular,
@@ -20,14 +23,51 @@ import {
 import DriverFooter from '@/app/Footer/DriverFooter';
 
 export default function SettingsScreen() {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_500Medium,
     ArimaMadurai_700Bold,
   });
 
-  if (!fontsLoaded) {
-    return null; // loading screen
+  // Load user data from database (using phone number as primary key)
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        // First try to get from AsyncStorage
+        const userStr = await AsyncStorage.getItem('user');
+        if (userStr) {
+          const userData = JSON.parse(userStr);
+          setUser(userData);
+        }
+        
+        // Also fetch latest from API to ensure we have current data from database
+        try {
+          const response = await apiGet<{ user: any }>('/users/me');
+          if (response.user) {
+            setUser(response.user);
+            await AsyncStorage.setItem('user', JSON.stringify(response.user));
+          }
+        } catch (apiError) {
+          console.error('Error fetching user from API:', apiError);
+          // Continue with AsyncStorage data if API fails
+        }
+      } catch (error) {
+        console.error('Error loading user:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadUser();
+  }, []);
+
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EAF3E9' }}>
+        <ActivityIndicator size="large" color="#04302B" />
+      </View>
+    );
   }
 
   return (
@@ -50,11 +90,23 @@ export default function SettingsScreen() {
             {/* Profile Section */}
             <View style={styles.profileSection}>
               <Image
-                source={require('../../assets/images/elder.png')}
+                source={
+                  user?.profileImage
+                    ? { uri: user.profileImage }
+                    : require('../../assets/images/profile.png')
+                }
                 style={styles.avatar}
               />
-              <Text style={styles.name}>Murukaiya Rajah</Text>
-              <Text style={styles.phone}>0771234567</Text>
+              <Text style={styles.name}>
+                {user?.firstName || 'Driver'} {user?.lastName || ''}
+              </Text>
+              <Text style={styles.phone}>{user?.phoneNumber || ''}</Text>
+              {user?.licenseNumber && (
+                <View style={styles.licenseContainer}>
+                  <Ionicons name="card-outline" size={14} color="#666" />
+                  <Text style={styles.licenseText}>License: {user.licenseNumber}</Text>
+                </View>
+              )}
             </View>
 
             {/* Menu List */}
@@ -148,7 +200,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'ArimaMadurai_400Regular',
     color: '#666',
-    paddingBottom:20,
+    marginTop: 4,
+  },
+  licenseContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    gap: 6,
+  },
+  licenseText: {
+    fontSize: 13,
+    fontFamily: 'ArimaMadurai_400Regular',
+    color: '#666',
   },
   menu: {
     backgroundColor: '#CFE2D3',

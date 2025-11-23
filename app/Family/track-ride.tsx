@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  Animated,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -35,6 +36,19 @@ interface Schedule {
   status?: string;
 }
 
+interface Ride {
+  _id: string;
+  scheduleId: string;
+  driverId: string;
+  status: string;
+  driverLocation?: {
+    latitude: number;
+    longitude: number;
+    heading?: number;
+    updatedAt: string;
+  };
+}
+
 export default function TrackRideScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView | null>(null);
@@ -43,20 +57,25 @@ export default function TrackRideScreen() {
   const [pickupLocation, setPickupLocation] = useState<LatLng | null>(null);
   const [dropLocation, setDropLocation] = useState<LatLng | null>(null);
   const [driverLocation, setDriverLocation] = useState<LatLng | null>(null);
+  const [driverHeading, setDriverHeading] = useState<number>(0);
   const [routeCoordinates, setRouteCoordinates] = useState<LatLng[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
+  const [ride, setRide] = useState<Ride | null>(null);
+  const locationUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
 
-  // Fetch today's schedule with driver info
+  // Fetch today's schedule and active ride
   useEffect(() => {
-    const fetchTodaySchedule = async () => {
+    const fetchRideData = async () => {
       try {
         setLoading(true);
-        const response = await apiGet<{ schedules: Schedule[] }>('/schedules');
+        
+        // Fetch schedules
+        const scheduleResponse = await apiGet<{ schedules: Schedule[] }>('/schedules');
         
         // Get today's date
         const today = new Date();
@@ -65,19 +84,45 @@ export default function TrackRideScreen() {
         const todayDay = today.getDate();
         
         // Find today's schedule with driver
-        const todaySchedule = (response.schedules || []).find((s: Schedule) => {
+        const todaySchedule = (scheduleResponse.schedules || []).find((s: Schedule) => {
           if (!s.date) return false;
           const scheduleDate = new Date(s.date);
           return (
             scheduleDate.getFullYear() === todayYear &&
             scheduleDate.getMonth() === todayMonth &&
             scheduleDate.getDate() === todayDay &&
-            s.driverId && s.driverName // Must have driver assigned
+            s.driverId && s.driverName
           );
         });
 
         if (todaySchedule) {
           setSchedule(todaySchedule);
+          
+          // Fetch active ride for this schedule
+          try {
+            const ridesResponse = await apiGet<{ rides: Ride[] }>('/api/rides');
+            const activeRide = ridesResponse.rides?.find(
+              (r: Ride) => r.scheduleId === todaySchedule._id && 
+                          (r.status === 'in_progress' || r.status === 'accepted')
+            );
+            
+            if (activeRide) {
+              setRide(activeRide);
+              // Update driver location if available
+              if (activeRide.driverLocation) {
+                setDriverLocation({
+                  latitude: activeRide.driverLocation.latitude,
+                  longitude: activeRide.driverLocation.longitude,
+                });
+                if (activeRide.driverLocation.heading) {
+                  setDriverHeading(activeRide.driverLocation.heading);
+                }
+              }
+            }
+          } catch (rideError) {
+            console.error('Error fetching ride:', rideError);
+          }
+          
           // Geocode locations
           await geocodeLocations(todaySchedule.fromLocation, todaySchedule.toLocation);
         } else {
@@ -92,15 +137,14 @@ export default function TrackRideScreen() {
       } catch (error: any) {
         console.error('Error fetching schedule:', error);
         
-        // Handle rate limiting error
         if (error.status === 429) {
           Alert.alert(
             "Too Many Requests",
-            "Please wait a moment and try again. The system is processing your request.",
+            "Please wait a moment and try again.",
             [{ text: "OK" }]
           );
         } else {
-          Alert.alert("Error", error.message || "Failed to load ride information. Please try again.");
+          Alert.alert("Error", error.message || "Failed to load ride information.");
         }
       } finally {
         setLoading(false);
@@ -108,8 +152,53 @@ export default function TrackRideScreen() {
       }
     };
 
-    fetchTodaySchedule();
+    fetchRideData();
   }, []);
+
+  // Real-time driver location updates (only when ride is in_progress)
+  useEffect(() => {
+    if (!ride || ride.status !== 'in_progress' || !ride.driverId) {
+      return;
+    }
+
+    const updateDriverLocation = async () => {
+      try {
+        const ridesResponse = await apiGet<{ rides: Ride[] }>('/api/rides');
+        const currentRide = ridesResponse.rides?.find((r: Ride) => r._id === ride._id);
+        
+        if (currentRide?.driverLocation) {
+          setDriverLocation({
+            latitude: currentRide.driverLocation.latitude,
+            longitude: currentRide.driverLocation.longitude,
+          });
+          if (currentRide.driverLocation.heading !== undefined) {
+            setDriverHeading(currentRide.driverLocation.heading);
+          }
+          
+          // Update map to follow driver
+          if (mapRef.current && driverLocation) {
+            mapRef.current.animateToRegion({
+              latitude: currentRide.driverLocation.latitude,
+              longitude: currentRide.driverLocation.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }, 1000);
+          }
+        }
+      } catch (error) {
+        console.error('Error updating driver location:', error);
+      }
+    };
+
+    // Update every 3 seconds when ride is in progress
+    locationUpdateIntervalRef.current = setInterval(updateDriverLocation, 3000);
+    
+    return () => {
+      if (locationUpdateIntervalRef.current) {
+        clearInterval(locationUpdateIntervalRef.current);
+      }
+    };
+  }, [ride, driverLocation]);
 
   // Geocode address strings to coordinates
   const geocodeLocations = async (fromAddress: string, toAddress: string) => {
@@ -305,15 +394,21 @@ export default function TrackRideScreen() {
                   />
                 )}
 
-                {/* Driver Location (if available) */}
-                {driverLocation && (
+                {/* Driver Location with 3D Car Marker */}
+                {driverLocation && ride?.status === 'in_progress' && (
                   <Marker
                     coordinate={driverLocation}
-                    pinColor="blue"
+                    anchor={{ x: 0.5, y: 0.5 }}
                     title="Driver Location"
                     description="Driver's current location"
+                    rotation={driverHeading}
                   >
-                    <Ionicons name="car" size={30} color="#2196F3" />
+                    <View style={styles.carMarkerContainer}>
+                      <View style={[styles.carMarker, { transform: [{ rotate: `${driverHeading}deg` }] }]}>
+                        <Ionicons name="car" size={40} color="#2196F3" />
+                        <View style={styles.carShadow} />
+                      </View>
+                    </View>
                   </Marker>
                 )}
 
@@ -504,6 +599,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "ArimaMadurai_400Regular",
     color: "#04302B",
+  },
+  carMarkerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  carMarker: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  carShadow: {
+    position: 'absolute',
+    bottom: -2,
+    left: '50%',
+    marginLeft: -8,
+    width: 16,
+    height: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: 2,
   },
 });
 

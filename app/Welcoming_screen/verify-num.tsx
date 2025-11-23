@@ -23,6 +23,7 @@ import {
 import CountryPicker, { CountryCode } from "react-native-country-picker-modal";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useRouter } from "expo-router";
+import { apiPost } from "@/services/api";
 
 export default function PhoneNumberScreen() {
   const router = useRouter();
@@ -52,9 +53,6 @@ export default function PhoneNumberScreen() {
     setLoading(true);
 
     try {
-      // Import API service
-      const { apiPost } = await import('@/services/api');
-      
       // Send OTP to backend
       const response = await apiPost('/auth/send-otp', {
         phoneNumber: fullNumber,

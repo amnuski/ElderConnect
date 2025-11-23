@@ -18,6 +18,7 @@ import Footer from "../Footer/DriverFooter";
 import { router, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiGet, apiPut, ApiError } from "@/services/api";
+import * as Location from "expo-location";
 import {
   useFonts,
   ArimaMadurai_400Regular,
@@ -63,11 +64,14 @@ export default function DriverDash() {
   const [refreshing, setRefreshing] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
   const [acceptedRides, setAcceptedRides] = useState<Ride[]>([]);
+  const [inProgressRides, setInProgressRides] = useState<Ride[]>([]);
   const [reminderShown, setReminderShown] = useState<Set<string>>(new Set());
   const [scheduleRidesMap, setScheduleRidesMap] = useState<Map<string, Ride>>(new Map());
   const lastSchedulesMapRef = useRef<Map<string, string>>(new Map());
   const previousRideIdsRef = useRef<Set<string>>(new Set());
   const lastFetchTimeRef = useRef<{ schedules: number; rides: number }>({ schedules: 0, rides: 0 });
+  const activeRideIdRef = useRef<string | null>(null);
+  const locationUpdateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const FETCH_COOLDOWN = 2000; // 2 seconds cooldown between fetches
 
   // Load driver data from database
@@ -128,6 +132,8 @@ export default function DriverDash() {
         .filter((schedule: Schedule) => {
           if (!schedule.date) return false;
           // Only show confirmed schedules (driver has accepted)
+          // Exclude completed and cancelled schedules
+          if (schedule.status === 'completed' || schedule.status === 'cancelled') return false;
           if (schedule.status !== 'confirmed') return false;
           const scheduleDate = new Date(schedule.date);
           return scheduleDate >= new Date(today.setHours(0, 0, 0, 0));
@@ -204,6 +210,9 @@ export default function DriverDash() {
       // Fetch accepted rides for pickup confirmation
       const acceptedResponse = await apiGet<{ rides: Ride[] }>('/api/rides?status=accepted');
       
+      // Fetch in_progress rides (active rides that need location tracking)
+      const inProgressResponse = await apiGet<{ rides: Ride[] }>('/api/rides?status=in_progress');
+      
       // Sort by scheduled time
       const sortedPendingRides = (pendingResponse.rides || [])
         .sort((a, b) => {
@@ -219,6 +228,22 @@ export default function DriverDash() {
           const timeB = new Date(b.scheduledTime).getTime();
           return timeA - timeB;
         });
+      
+      // If there's an in_progress ride, start location tracking
+      const inProgressRidesList = inProgressResponse.rides || [];
+      const driverInProgressRides = inProgressRidesList.filter(
+        (r: Ride) => r.driverId?.toString() === user?._id?.toString()
+      );
+      setInProgressRides(driverInProgressRides);
+      
+      const activeInProgressRide = driverInProgressRides[0]; // Get first in-progress ride
+      
+      if (activeInProgressRide && activeInProgressRide._id !== activeRideIdRef.current) {
+        startLocationTracking(activeInProgressRide._id);
+      } else if (!activeInProgressRide && activeRideIdRef.current) {
+        // No active ride, stop tracking
+        stopLocationTracking();
+      }
       
       // Check for cancelled rides (ride was accepted/pending before, now cancelled or missing)
       const currentRideIds = new Set([
@@ -395,13 +420,154 @@ export default function DriverDash() {
     }
   };
 
+  // Update driver location during ride
+  const updateDriverLocation = async (rideId: string) => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('Location permission not granted');
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const heading = location.coords.heading || 0;
+
+      await apiPut(`/api/rides/${rideId}/location`, {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        heading: heading,
+      });
+    } catch (error: any) {
+      // Silently handle rate limit errors - don't spam console
+      if (error?.status === 429) {
+        // Rate limit exceeded - will retry on next interval
+        return;
+      }
+      // Only log non-rate-limit errors
+      console.error('Error updating driver location:', error);
+    }
+  };
+
+  // Start location tracking for active ride
+  const startLocationTracking = (rideId: string) => {
+    // Clear any existing interval
+    if (locationUpdateIntervalRef.current) {
+      clearInterval(locationUpdateIntervalRef.current);
+    }
+
+    activeRideIdRef.current = rideId;
+    
+    // Update immediately
+    updateDriverLocation(rideId);
+    
+    // Then update every 15 seconds (to avoid rate limiting)
+    // Rate limit: 120 requests per 15 minutes = ~8 per minute
+    // 15 seconds = 4 per minute, which is well within limits
+    locationUpdateIntervalRef.current = setInterval(() => {
+      if (activeRideIdRef.current === rideId) {
+        updateDriverLocation(rideId);
+      }
+    }, 15000); // 15 seconds interval for better rate limit compliance
+  };
+
+  // Stop location tracking
+  const stopLocationTracking = () => {
+    if (locationUpdateIntervalRef.current) {
+      clearInterval(locationUpdateIntervalRef.current);
+      locationUpdateIntervalRef.current = null;
+    }
+    activeRideIdRef.current = null;
+  };
+
+  // Complete ride (confirm drop) function
+  const handleCompleteRide = async (rideId: string) => {
+    const ride = inProgressRides.find(r => r._id === rideId);
+    try {
+      setProcessing(rideId);
+      
+      const response = await apiPut<{ message: string; ride: Ride }>(
+        `/api/rides/${rideId}/complete`
+      );
+      
+      // Stop location tracking
+      stopLocationTracking();
+      
+      // Remove from in-progress rides
+      setInProgressRides((prevRides) =>
+        prevRides.filter((ride) => ride._id !== rideId)
+      );
+      
+      // Remove completed schedule from local state immediately
+      setSchedules((prevSchedules) => {
+        const completedRide = inProgressRides.find(r => r._id === rideId);
+        if (completedRide) {
+          return prevSchedules.filter(s => s._id !== completedRide.scheduleId);
+        }
+        return prevSchedules;
+      });
+      
+      // Also remove from scheduleRidesMap
+      const completedRide = inProgressRides.find(r => r._id === rideId);
+      if (completedRide) {
+        setScheduleRidesMap((prevMap) => {
+          const newMap = new Map(prevMap);
+          newMap.delete(completedRide.scheduleId);
+          return newMap;
+        });
+      }
+      
+      Alert.alert(
+        "Drop Confirmed ✅", 
+        `${response.message || "Ride completed successfully!"}\n\nSchedule has been cleared. You can now accept new ride requests.`,
+        [{ text: "OK" }]
+      );
+      
+      // Refresh rides and schedules to show new assignments
+      fetchRides();
+      fetchSchedules();
+    } catch (error) {
+      const apiError = error as ApiError;
+      Alert.alert(
+        "Error",
+        apiError.message || "Failed to complete ride. Please try again."
+      );
+      console.error("Error completing ride:", error);
+    } finally {
+      setProcessing(null);
+    }
+  };
+
   // Confirm pickup function
   const handleConfirmPickup = async (rideId: string) => {
     const ride = acceptedRides.find(r => r._id === rideId);
     try {
       setProcessing(rideId);
+      
+      // Get current location before confirming
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      let latitude: number | undefined;
+      let longitude: number | undefined;
+      let heading: number | undefined;
+
+      if (status === 'granted') {
+        try {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High,
+          });
+          latitude = location.coords.latitude;
+          longitude = location.coords.longitude;
+          heading = location.coords.heading || 0;
+        } catch (locError) {
+          console.error('Error getting location:', locError);
+        }
+      }
+
       const response = await apiPut<{ message: string; ride: Ride }>(
-        `/api/rides/${rideId}/pickup`
+        `/api/rides/${rideId}/pickup`,
+        latitude && longitude ? { latitude, longitude, heading } : undefined
       );
       
       // Update local state
@@ -409,10 +575,21 @@ export default function DriverDash() {
         prevRides.filter((ride) => ride._id !== rideId)
       );
       
+      // Start location tracking
+      startLocationTracking(rideId);
+      
       Alert.alert(
         "Pickup Confirmed ✅", 
-        `${response.message || "Pickup confirmed successfully."}\n\nElder and family members have been notified and can now track the ride.`,
-        [{ text: "OK" }]
+        `${response.message || "Pickup confirmed successfully."}\n\nElder and family members have been notified and can now track the ride in real-time.`,
+        [
+          { text: "View Route", onPress: () => {
+            router.push({
+              pathname: '/Driver/route-view',
+              params: { rideId: rideId }
+            });
+          }},
+          { text: "OK", style: "cancel" }
+        ]
       );
       
       // Refresh rides
@@ -429,6 +606,13 @@ export default function DriverDash() {
       setProcessing(null);
     }
   };
+
+  // Cleanup location tracking on unmount
+  useEffect(() => {
+    return () => {
+      stopLocationTracking();
+    };
+  }, []);
 
   // Check for 10-minute reminders
   useEffect(() => {
@@ -586,6 +770,110 @@ export default function DriverDash() {
             />
           }
         >
+          {/* In Progress Rides - Ready for Drop Confirmation */}
+          {inProgressRides.length > 0 && (
+            <View style={styles.schedulesSection}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleContainer}>
+                  <Ionicons name="car-sport" size={24} color="#2196F3" />
+                  <Text style={styles.sectionTitle}>In Progress</Text>
+                </View>
+                <View style={styles.countBadge}>
+                  <Text style={styles.countBadgeText}>{inProgressRides.length}</Text>
+                </View>
+              </View>
+              {ridesLoading ? (
+                <View style={styles.loadingWrapper}>
+                  <ActivityIndicator size="small" color="#0A3D2E" />
+                </View>
+              ) : (
+                inProgressRides.map((ride) => (
+                  <LinearGradient
+                    key={ride._id}
+                    colors={["#FFFFFF", "#E3F2FD"]}
+                    style={styles.rideCard}
+                  >
+                    <View style={styles.cardHeader}>
+                      <View style={styles.cardTitleContainer}>
+                        <View style={styles.iconContainer}>
+                          <Ionicons name="car-outline" size={22} color="#2196F3" />
+                        </View>
+                        <Text style={styles.cardTitle}>Ride In Progress</Text>
+                      </View>
+                      <View style={styles.inProgressBadge}>
+                        <Ionicons name="navigate" size={16} color="white" />
+                        <Text style={styles.inProgressBadgeText}>IN PROGRESS</Text>
+                      </View>
+                    </View>
+                    <View style={styles.cardBody}>
+                      <View style={styles.infoRow}>
+                        <View style={styles.infoIcon}>
+                          <Ionicons name="time" size={18} color="#0A3D2E" />
+                        </View>
+                        <Text style={styles.infoText}>
+                          {formatTime(ride.scheduledTime)}
+                        </Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <View style={[styles.infoIcon, styles.pickupIcon]}>
+                          <Ionicons name="location" size={18} color="#4CAF50" />
+                        </View>
+                        <View style={styles.locationContainer}>
+                          <Text style={styles.locationLabel}>Pickup</Text>
+                          <Text style={styles.locationText} numberOfLines={2}>
+                            {ride.pickupLocation}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <View style={[styles.infoIcon, styles.dropIcon]}>
+                          <Ionicons name="location" size={18} color="#F44336" />
+                        </View>
+                        <View style={styles.locationContainer}>
+                          <Text style={styles.locationLabel}>Drop-off</Text>
+                          <Text style={styles.locationText} numberOfLines={2}>
+                            {ride.dropLocation}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.buttonRow}>
+                        <TouchableOpacity
+                          style={[
+                            styles.completeRideButton,
+                            processing === ride._id && styles.buttonDisabled,
+                          ]}
+                          onPress={() => handleCompleteRide(ride._id)}
+                          disabled={processing === ride._id}
+                        >
+                          {processing === ride._id ? (
+                            <ActivityIndicator size="small" color="white" />
+                          ) : (
+                            <>
+                              <Ionicons name="checkmark-done-circle" size={20} color="white" />
+                              <Text style={styles.completeRideButtonText}>Confirm Drop</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.viewRouteButton}
+                          onPress={() => {
+                            router.push({
+                              pathname: '/Driver/route-view',
+                              params: { rideId: ride._id }
+                            });
+                          }}
+                        >
+                          <Ionicons name="map-outline" size={20} color="white" />
+                          <Text style={styles.viewRouteButtonText}>View Route</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                ))
+              )}
+            </View>
+          )}
+
           {/* Accepted Rides - Ready for Pickup */}
           {acceptedRides.length > 0 && (
             <View style={styles.schedulesSection}>
@@ -652,23 +940,37 @@ export default function DriverDash() {
                           </Text>
                         </View>
                       </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.confirmPickupButton,
-                          processing === ride._id && styles.buttonDisabled,
-                        ]}
-                        onPress={() => handleConfirmPickup(ride._id)}
-                        disabled={processing === ride._id}
-                      >
-                        {processing === ride._id ? (
-                          <ActivityIndicator size="small" color="white" />
-                        ) : (
-                          <>
-                            <Ionicons name="checkmark-circle" size={20} color="white" />
-                            <Text style={styles.confirmPickupButtonText}>Confirm Pickup</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
+                      <View style={styles.buttonRow}>
+                        <TouchableOpacity
+                          style={[
+                            styles.confirmPickupButton,
+                            processing === ride._id && styles.buttonDisabled,
+                          ]}
+                          onPress={() => handleConfirmPickup(ride._id)}
+                          disabled={processing === ride._id}
+                        >
+                          {processing === ride._id ? (
+                            <ActivityIndicator size="small" color="white" />
+                          ) : (
+                            <>
+                              <Ionicons name="checkmark-circle" size={20} color="white" />
+                              <Text style={styles.confirmPickupButtonText}>Confirm Pickup</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.viewRouteButton}
+                          onPress={() => {
+                            router.push({
+                              pathname: '/Driver/route-view',
+                              params: { rideId: ride._id }
+                            });
+                          }}
+                        >
+                          <Ionicons name="map-outline" size={20} color="white" />
+                          <Text style={styles.viewRouteButtonText}>View Route</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </LinearGradient>
                 ))
@@ -872,28 +1174,47 @@ export default function DriverDash() {
                       )}
                       {/* Show Confirm Pickup button for confirmed schedules with accepted rides */}
                       {schedule.status === 'confirmed' && scheduleRidesMap.has(schedule._id) && (
-                        <TouchableOpacity
-                          style={[
-                            styles.confirmPickupButton,
-                            processing === scheduleRidesMap.get(schedule._id)?._id && styles.buttonDisabled,
-                          ]}
-                          onPress={() => {
-                            const ride = scheduleRidesMap.get(schedule._id);
-                            if (ride) {
-                              handleConfirmPickup(ride._id);
-                            }
-                          }}
-                          disabled={processing === scheduleRidesMap.get(schedule._id)?._id}
-                        >
-                          {processing === scheduleRidesMap.get(schedule._id)?._id ? (
-                            <ActivityIndicator size="small" color="white" />
-                          ) : (
-                            <>
-                              <Ionicons name="checkmark-circle" size={20} color="white" />
-                              <Text style={styles.confirmPickupButtonText}>Confirm Pickup</Text>
-                            </>
+                        <View style={styles.buttonRow}>
+                          <TouchableOpacity
+                            style={[
+                              styles.confirmPickupButton,
+                              processing === scheduleRidesMap.get(schedule._id)?._id && styles.buttonDisabled,
+                            ]}
+                            onPress={() => {
+                              const ride = scheduleRidesMap.get(schedule._id);
+                              if (ride) {
+                                handleConfirmPickup(ride._id);
+                              }
+                            }}
+                            disabled={processing === scheduleRidesMap.get(schedule._id)?._id}
+                          >
+                            {processing === scheduleRidesMap.get(schedule._id)?._id ? (
+                              <ActivityIndicator size="small" color="white" />
+                            ) : (
+                              <>
+                                <Ionicons name="checkmark-circle" size={20} color="white" />
+                                <Text style={styles.confirmPickupButtonText}>Confirm Pickup</Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                          {scheduleRidesMap.get(schedule._id) && (
+                            <TouchableOpacity
+                              style={styles.viewRouteButton}
+                              onPress={() => {
+                                const ride = scheduleRidesMap.get(schedule._id);
+                                if (ride) {
+                                  router.push({
+                                    pathname: '/Driver/route-view',
+                                    params: { rideId: ride._id }
+                                  });
+                                }
+                              }}
+                            >
+                              <Ionicons name="map-outline" size={20} color="white" />
+                              <Text style={styles.viewRouteButtonText}>View Route</Text>
+                            </TouchableOpacity>
                           )}
-                        </TouchableOpacity>
+                        </View>
                       )}
                     </View>
                   </LinearGradient>
@@ -1275,6 +1596,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     marginTop: 12,
+    flex: 1,
     shadowColor: "#10B981",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -1286,6 +1608,68 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
     fontFamily: "ArimaMadurai_700Bold",
+  },
+  viewRouteButton: {
+    backgroundColor: "#2196F3",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 12,
+    marginLeft: 8,
+    flex: 1,
+    shadowColor: "#2196F3",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  viewRouteButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 16,
+    fontFamily: "ArimaMadurai_700Bold",
+  },
+  completeRideButton: {
+    backgroundColor: "#2196F3",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 12,
+    flex: 1,
+    shadowColor: "#2196F3",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  completeRideButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 16,
+    fontFamily: "ArimaMadurai_700Bold",
+  },
+  inProgressBadge: {
+    backgroundColor: "#2196F3",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  inProgressBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontFamily: "ArimaMadurai_700Bold",
+    letterSpacing: 0.5,
   },
   emptyContainer: {
     alignItems: "center",
