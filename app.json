@@ -4,7 +4,7 @@
     "slug": "elderconnect",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/elderconnect-logo.png",
     "scheme": "elderconnect",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,9 +14,8 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/elderconnect-logo.png"
+      
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -24,14 +23,14 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/elderconnect-logo.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/elderconnect-logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -49,7 +48,11 @@
     "extra": {
       "DEV_API_PORT": "5000",
       "DEV_API_IP": "http://127.0.0.1:5000",
-      "TUNNEL_URL": "https://vesical-superloyally-reese.ngrok-free.dev"
+      "TUNNEL_URL": "https://vesical-superloyally-reese.ngrok-free.dev",
+      "router": {},
+      "eas": {
+        "projectId": "4e7ae914-c7f8-49b2-95c3-a63e221d218a"
+      }
     }
   }
 }

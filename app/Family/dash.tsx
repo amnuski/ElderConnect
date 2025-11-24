@@ -17,6 +17,7 @@ import {
   RefreshControl,
   Alert,
   Modal,
+  Linking,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Footer from "../Footer/footer";
@@ -52,6 +53,11 @@ export default function Dashboard() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
   const [lastRideStatusesMap, setLastRideStatusesMap] = useState<Map<string, string>>(new Map());
+  const [familyContacts, setFamilyContacts] = useState<any[]>([]);
+  const [familyCallModalVisible, setFamilyCallModalVisible] = useState(false);
+  const [familyContactsLoading, setFamilyContactsLoading] = useState(false);
+  const [driverContacts, setDriverContacts] = useState<any[]>([]);
+  const [driverCallModalVisible, setDriverCallModalVisible] = useState(false);
   const lastFetchTimeRef = useRef<number>(0);
   const FETCH_COOLDOWN = 2000; // 2 seconds cooldown between fetches
 
@@ -88,6 +94,18 @@ export default function Dashboard() {
     };
     loadUser();
   }, []);
+
+  const fetchFamilyContacts = async () => {
+    try {
+      setFamilyContactsLoading(true);
+      const response = await apiGet<{ members: any[] }>('/family');
+      setFamilyContacts(response.members || []);
+    } catch (error) {
+      console.error('Error fetching family contacts:', error);
+    } finally {
+      setFamilyContactsLoading(false);
+    }
+  };
 
   // Fetch schedules and check ride status changes
   const fetchSchedules = async () => {
@@ -356,6 +374,23 @@ export default function Dashboard() {
       setLastRideStatuses(newStatusMap);
 
       setActivities(todaySchedules);
+
+      const driverMap = new Map<string, any>();
+      todaySchedules.forEach((schedule: Activity) => {
+        if (schedule.driverPhone) {
+          const key = schedule.driverPhone;
+          if (!driverMap.has(key)) {
+            driverMap.set(key, {
+              id: schedule.driverId || key,
+              name: schedule.driverName || "Assigned Driver",
+              phone: schedule.driverPhone,
+              rideTitle: schedule.title,
+              rideTime: schedule.time,
+            });
+          }
+        }
+      });
+      setDriverContacts(Array.from(driverMap.values()));
     } catch (error: any) {
       console.error('Error fetching schedules:', error);
       Alert.alert("Error", "Failed to load activities. Please try again.");
@@ -369,6 +404,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (user) {
       fetchSchedules();
+      fetchFamilyContacts();
     }
   }, [user]);
 
@@ -403,11 +439,60 @@ export default function Dashboard() {
     );
   }
 
-  const quickActions = [
-    { icon: "call", route: "/Call/DriverCall" },
-    { icon: "person", route: "/Call/CareTakerCall" },
-    { icon: "car", route: "/Call/FamilyCall" },
+  type QuickAction = { icon: keyof typeof Ionicons.glyphMap; route: string };
+
+  const quickActions: QuickAction[] = [
+    { icon: "call", route: "/Call/FamilyCall" },
+   /* { icon: "person", route: "/Call/CareTakerCall" },*/
+    { icon: "car", route: "/Call/DriverCall" },
   ];
+
+  const handleQuickActionPress = async (action: QuickAction) => {
+    if (action.route === "/Call/FamilyCall") {
+      if (!familyContacts.length) {
+        await fetchFamilyContacts();
+      }
+      setFamilyCallModalVisible(true);
+      return;
+    }
+    if (action.route === "/Call/DriverCall") {
+      if (!driverContacts.length) {
+        Alert.alert(
+          "No driver assigned",
+          "A driver number appears here once a ride is accepted for today.",
+          [
+            {
+              text: "Track Ride",
+              onPress: () => router.push("/Family/track-ride"),
+            },
+            { text: "OK" },
+          ]
+        );
+        return;
+      }
+      setDriverCallModalVisible(true);
+      return;
+    }
+    router.push(action.route as any);
+  };
+
+  const handleCallContact = (contact: any) => {
+    if (!contact?.phone) {
+      Alert.alert("No number", "This contact does not have a phone number yet.");
+      return;
+    }
+    const cleaned = contact.phone.replace(/[^\d+]/g, "");
+    Linking.openURL(`tel:${cleaned}`);
+  };
+
+  const handleCallDriver = (driver: any) => {
+    if (!driver?.phone) {
+      Alert.alert("Unavailable", "Driver phone number not available yet.");
+      return;
+    }
+    const cleaned = driver.phone.replace(/[^\d+]/g, "");
+    Linking.openURL(`tel:${cleaned}`);
+  };
 
   const handleTabPress = (tab: string) => setActiveTab(tab);
 
@@ -631,17 +716,17 @@ export default function Dashboard() {
           </TouchableOpacity>
 
           {/* Quick Actions */}
-          <View style={styles.quickActionsContainer}>
-            {quickActions.map((action, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.quickActionButton}
-                onPress={() => router.push(action.route as any)}
-              >
-                <Ionicons name={action.icon as any} size={26} color="#04302B" />
-              </TouchableOpacity>
-            ))}
-          </View>
+        <View style={styles.quickActionsContainer}>
+          {quickActions.map((action, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.quickActionButton}
+              onPress={() => handleQuickActionPress(action)}
+            >
+              <Ionicons name={action.icon as any} size={26} color="#04302B" />
+            </TouchableOpacity>
+          ))}
+        </View>
 
           {/* Additional Content */}
           <View style={styles.additionalContent}>
@@ -656,6 +741,146 @@ export default function Dashboard() {
 
         {/* Footer */}
         <Footer activeTab={activeTab} onTabPress={handleTabPress} />
+
+        {/* Quick Call Modal */}
+        <Modal
+          visible={familyCallModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setFamilyCallModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.callModal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Family Contacts</Text>
+                <TouchableOpacity
+                  onPress={() => setFamilyCallModalVisible(false)}
+                  style={styles.modalCloseButton}
+                >
+                  <Ionicons name="close" size={24} color="#04302B" />
+                </TouchableOpacity>
+              </View>
+
+              {familyContactsLoading ? (
+                <View style={styles.callModalEmpty}>
+                  <ActivityIndicator size="large" color="#04302B" />
+                  <Text style={styles.emptyNotificationsText}>Loading contacts...</Text>
+                </View>
+              ) : familyContacts.length > 0 ? (
+                familyContacts.map((contact, idx) => (
+                  <View key={contact._id || idx.toString()} style={styles.callContactCard}>
+                    <View>
+                      <Text style={styles.callContactName}>{contact.name}</Text>
+                      <Text style={styles.callContactPhone}>{contact.phone}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.callNowButton}
+                      onPress={() => handleCallContact(contact)}
+                    >
+                      <Ionicons name="call" size={18} color="#fff" />
+                      <Text style={styles.callNowText}>Call</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.callModalEmpty}>
+                  <Ionicons name="people-circle-outline" size={48} color="#9FB8A6" />
+                  <Text style={styles.emptyNotificationsText}>
+                    No family contacts yet. Tap Manage to add one.
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.callModalActions}>
+                <TouchableOpacity
+                  style={styles.manageContactsButton}
+                  onPress={() => {
+                    setFamilyCallModalVisible(false);
+                    router.push("/Call/FamilyCall");
+                  }}
+                >
+                  <Text style={styles.manageContactsText}>Manage Contacts</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.closeCallModalButton}
+                  onPress={() => setFamilyCallModalVisible(false)}
+                >
+                  <Text style={styles.closeCallModalText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Driver Call Modal */}
+        <Modal
+          visible={driverCallModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDriverCallModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.callModal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Driver Contact</Text>
+                <TouchableOpacity
+                  onPress={() => setDriverCallModalVisible(false)}
+                  style={styles.modalCloseButton}
+                >
+                  <Ionicons name="close" size={24} color="#04302B" />
+                </TouchableOpacity>
+              </View>
+
+              {driverContacts.length > 0 ? (
+                driverContacts.map((driver, idx) => (
+                  <View key={driver.id || idx.toString()} style={styles.callContactCard}>
+                    <View>
+                      <Text style={styles.callContactName}>{driver.name}</Text>
+                      <Text style={styles.callContactPhone}>{driver.phone}</Text>
+                      {driver.rideTitle && (
+                        <Text style={styles.driverRideInfo}>
+                          {driver.rideTitle} • {driver.rideTime}
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={styles.callNowButton}
+                      onPress={() => handleCallDriver(driver)}
+                    >
+                      <Ionicons name="call" size={18} color="#fff" />
+                      <Text style={styles.callNowText}>Call</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.callModalEmpty}>
+                  <Ionicons name="car-outline" size={48} color="#9FB8A6" />
+                  <Text style={styles.emptyNotificationsText}>
+                    Driver details appear once a driver accepts today's ride.
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.callModalActions}>
+                <TouchableOpacity
+                  style={styles.manageContactsButton}
+                  onPress={() => {
+                    setDriverCallModalVisible(false);
+                    router.push("/Family/track-ride");
+                  }}
+                >
+                  <Text style={styles.manageContactsText}>Track Ride</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.closeCallModalButton}
+                  onPress={() => setDriverCallModalVisible(false)}
+                >
+                  <Text style={styles.closeCallModalText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Notification Modal */}
         <Modal
@@ -1048,6 +1273,83 @@ const styles = StyleSheet.create({
   additionalContent: { marginTop: screenHeight * 0.01, padding: screenWidth * 0.05, backgroundColor: "#E8F5E8", borderRadius: screenWidth * 0.03 },
   additionalTitle: { fontFamily: "ArimaMadurai_700Bold", fontSize: screenWidth * 0.05, color: "#04302B", marginBottom: screenHeight * 0.01 },
   additionalText: { fontFamily: "ArimaMadurai_400Regular", fontSize: screenWidth * 0.04, color: "#333" },
+  callModal: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    marginHorizontal: 16,
+  },
+  callContactCard: {
+    backgroundColor: "#F0F7F1",
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  callContactName: {
+    fontFamily: "ArimaMadurai_700Bold",
+    fontSize: screenWidth * 0.045,
+    color: "#04302B",
+  },
+  callContactPhone: {
+    marginTop: 4,
+    fontFamily: "ArimaMadurai_400Regular",
+    color: "#4C5C52",
+  },
+  driverRideInfo: {
+    marginTop: 4,
+    fontFamily: "ArimaMadurai_400Regular",
+    color: "#6C7A72",
+    fontSize: screenWidth * 0.035,
+  },
+  callNowButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#04302B",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  callNowText: {
+    color: "#FFFFFF",
+    fontFamily: "ArimaMadurai_700Bold",
+  },
+  callModalEmpty: {
+    alignItems: "center",
+    marginTop: 20,
+    paddingHorizontal: 10,
+  },
+  callModalActions: {
+    flexDirection: "row",
+    marginTop: 20,
+    gap: 12,
+  },
+  manageContactsButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#04302B",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  manageContactsText: {
+    color: "#04302B",
+    fontFamily: "ArimaMadurai_700Bold",
+  },
+  closeCallModalButton: {
+    flex: 1,
+    backgroundColor: "#04302B",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  closeCallModalText: {
+    color: "#FFFFFF",
+    fontFamily: "ArimaMadurai_700Bold",
+  },
   loadingContainer: {
     paddingVertical: screenHeight * 0.05,
     alignItems: "center",

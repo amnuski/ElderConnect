@@ -82,6 +82,37 @@ export default function PhoneNumberScreen() {
       Alert.alert("Error", errorMessage);
       console.error('OTP send error:', error);
     }
+    // try {
+    //   // Call backend API to send OTP
+    //   const response = await apiPost<{
+    //     message: string;
+    //     devOTP?: string;
+    //     phoneNumber?: string;
+    //   }>('/auth/send-otp', {
+    //     phoneNumber: fullNumber,
+    //   });
+
+    //   setLoading(false);
+      
+    //   // Show success message with dev OTP if available (for testing)
+    //   const message = response.devOTP 
+    //     ? `OTP sent to ${fullNumber}\n\nDev OTP: ${response.devOTP}`
+    //     : `OTP sent to ${fullNumber}`;
+      
+    //   Alert.alert("Code Sent", message);
+
+    //   // Navigate to OTP screen with phone number as param
+    //   router.push({
+    //     pathname: "/Welcoming_screen/otp",
+    //     params: { phone: fullNumber },
+    //   });
+    // } catch (error: any) {
+    //   setLoading(false);
+    //   const errorMessage = error?.message || error?.data?.message || "Failed to send OTP. Please try again.";
+    //   Alert.alert("Error", errorMessage);
+    //   console.error('OTP send error:', error);
+    // }
+
   };
 
   return (

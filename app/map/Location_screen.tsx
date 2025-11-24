@@ -31,6 +31,7 @@ export default function App() {
   const [route, setRoute] = useState<LatLng[]>([]);
   const [distance, setDistance] = useState<number | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
+  const [fare, setFare] = useState<number | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [searchResults, setSearchResults] = useState<NominatimResult[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -142,6 +143,12 @@ export default function App() {
     getCurrentLocation();
   }, []);
 
+  const calculateFare = (distanceKm: number) => {
+    const baseFare = 200; // flat fee to dispatch a vehicle
+    const perKmRate = 75; // cost per km
+    return Math.max(baseFare, baseFare + distanceKm * perKmRate);
+  };
+
   // Get route from OSRM
   const getRoute = async (mode: "car" | "bike" | "foot" = "car") => {
     if (!startLocation || !endLocation) return;
@@ -158,17 +165,22 @@ export default function App() {
         const coords = json.routes[0].geometry.coordinates.map(
           ([lng, lat]: [number, number]) => ({ latitude: lat, longitude: lng })
         );
+        const computedDistance = json.routes[0].distance / 1000;
         setRoute(coords);
-        setDistance(json.routes[0].distance / 1000);
+        setDistance(computedDistance);
         setDuration(json.routes[0].duration / 60);
+        setFare(calculateFare(computedDistance));
 
         mapRef.current?.fitToCoordinates(coords, {
           edgePadding: { top: 50, bottom: 50, left: 50, right: 50 },
           animated: true,
         });
+      } else {
+        setFare(null);
       }
     } catch (error) {
       console.error("OSRM route error:", error);
+      setFare(null);
     }
   };
 
@@ -257,6 +269,9 @@ export default function App() {
         <View style={styles.directionContainer}>
           <Text>Distance: {distance ? distance.toFixed(2) : "-"} km</Text>
           <Text>Duration: {duration ? duration.toFixed(0) : "-"} min</Text>
+          <Text style={styles.fareText}>
+            Estimated Fare: {fare ? `LKR ${fare.toFixed(0)}` : "-"}
+          </Text>
           <View style={styles.modeButtons}>
             <TouchableOpacity style={styles.modeButton} onPress={() => getRoute("car")}>
               <Text>Car</Text>
@@ -351,6 +366,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 5,
+  },
+  fareText: {
+    marginTop: 8,
+    fontWeight: "600",
+    color: "#04302B",
   },
   modeButtons: { flexDirection: "row", marginTop: 10, justifyContent: "space-around" },
   modeButton: { padding: 8, backgroundColor: "#eee", borderRadius: 5 },
