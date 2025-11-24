@@ -15,6 +15,7 @@ import {
   ArimaMadurai_400Regular,
   ArimaMadurai_700Bold,
 } from "@expo-google-fonts/arima-madurai";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function WelcomeScreen() {
   const router = useRouter();

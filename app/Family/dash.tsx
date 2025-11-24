@@ -128,10 +128,12 @@ export default function Dashboard() {
         const rides = ridesResponse.rides || [];
         
         // Check for rides that changed from accepted to in_progress (pickup confirmed)
+        // Check for rides that changed from in_progress to completed (drop confirmed)
         rides.forEach((ride: any) => {
           const lastStatus = lastRideStatusesMap.get(ride._id);
+          
+          // Pickup confirmed notification
           if (lastStatus === 'accepted' && ride.status === 'in_progress') {
-            // Pickup confirmed - show notification and auto-open track ride
             const notification = {
               id: `pickup-confirmed-${ride._id}-${Date.now()}`,
               type: 'pickup',
@@ -161,6 +163,26 @@ export default function Dashboard() {
             setTimeout(() => {
               router.push('/Family/track-ride');
             }, 1000);
+          }
+          
+          // Drop confirmed notification
+          if (lastStatus === 'in_progress' && ride.status === 'completed') {
+            const notification = {
+              id: `drop-confirmed-${ride._id}-${Date.now()}`,
+              type: 'completed',
+              title: '✅ Drop Confirmed',
+              message: `Driver has completed the ride and confirmed drop at ${ride.dropLocation || 'destination'}.`,
+              rideId: ride._id,
+              scheduleId: ride.scheduleId,
+              timestamp: new Date(),
+            };
+            setNotifications(prev => [notification, ...prev].slice(0, 50));
+            
+            Alert.alert(
+              "✅ Drop Confirmed",
+              `Driver has completed the ride and confirmed drop at ${ride.dropLocation || 'destination'}. Thank you for using ElderConnect!`,
+              [{ text: "OK" }]
+            );
           }
         });
         
@@ -918,12 +940,14 @@ export default function Dashboard() {
                         notification.type === 'declined' && styles.notificationIconError,
                         notification.type === 'cancelled' && styles.notificationIconError,
                         notification.type === 'pickup' && styles.notificationIconInfo,
+                        notification.type === 'completed' && styles.notificationIconSuccess,
                       ]}>
                         <Ionicons
                           name={
                             notification.type === 'accepted' ? 'checkmark-circle' :
                             notification.type === 'declined' ? 'close-circle' :
                             notification.type === 'pickup' ? 'car' :
+                            notification.type === 'completed' ? 'checkmark-done-circle' :
                             'alert-circle'
                           }
                           size={24}

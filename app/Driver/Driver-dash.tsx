@@ -238,6 +238,17 @@ export default function DriverDash() {
       
       const activeInProgressRide = driverInProgressRides[0]; // Get first in-progress ride
       
+      // Check if currently tracked ride is still in progress
+      if (activeRideIdRef.current) {
+        const isStillInProgress = driverInProgressRides.some(
+          (r: Ride) => r._id === activeRideIdRef.current
+        );
+        if (!isStillInProgress) {
+          // Currently tracked ride is no longer in progress (completed/cancelled), stop tracking
+          stopLocationTracking();
+        }
+      }
+      
       if (activeInProgressRide && activeInProgressRide._id !== activeRideIdRef.current) {
         startLocationTracking(activeInProgressRide._id);
       } else if (!activeInProgressRide && activeRideIdRef.current) {
@@ -423,6 +434,11 @@ export default function DriverDash() {
   // Update driver location during ride
   const updateDriverLocation = async (rideId: string) => {
     try {
+      // Check if ride is still active before updating
+      if (activeRideIdRef.current !== rideId) {
+        return; // Ride changed, stop updating
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         console.warn('Location permission not granted');
@@ -446,8 +462,21 @@ export default function DriverDash() {
         // Rate limit exceeded - will retry on next interval
         return;
       }
-      // Only log non-rate-limit errors
-      console.error('Error updating driver location:', error);
+      
+      // If ride is completed or cancelled, stop tracking silently
+      if (error?.status === 400) {
+        const errorMessage = error?.data?.error || error?.message || '';
+        if (errorMessage.includes('completed') || errorMessage.includes('must be in progress')) {
+          // Ride is completed, stop tracking
+          stopLocationTracking();
+          return;
+        }
+      }
+      
+      // Only log other errors (not rate limit or completed ride)
+      if (error?.status !== 400) {
+        console.error('Error updating driver location:', error);
+      }
     }
   };
 
@@ -469,6 +498,9 @@ export default function DriverDash() {
     locationUpdateIntervalRef.current = setInterval(() => {
       if (activeRideIdRef.current === rideId) {
         updateDriverLocation(rideId);
+      } else {
+        // Ride changed, stop this interval
+        stopLocationTracking();
       }
     }, 15000); // 15 seconds interval for better rate limit compliance
   };

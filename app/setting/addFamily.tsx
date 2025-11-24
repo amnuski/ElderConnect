@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -43,11 +44,29 @@ export default function FamilyPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [relationPickerVisible, setRelationPickerVisible] = useState(false);
+  const [linkedElderId, setLinkedElderId] = useState<string | null>(null);
 
   const [fontsLoaded] = useFonts({
     ArimaMadurai_400Regular,
     ArimaMadurai_700Bold,
   });
+
+  const normalizedRole = (user?.role || "").toString().trim().toLowerCase();
+
+  const relationOptions = useMemo(() => {
+    if (
+      !normalizedRole ||
+      normalizedRole.includes("elder") ||
+      normalizedRole.includes("family")
+    ) {
+      return ["Elder", "Family Member", "Caregiver", "Doctor", "Emergency Contact"];
+    }
+    return ["Elder"];
+  }, [normalizedRole]);
+
+  const canManageFamily =
+    !normalizedRole || normalizedRole.includes("elder") || normalizedRole.includes("family");
 
   useEffect(() => {
     const loadUser = async () => {
@@ -56,7 +75,20 @@ export default function FamilyPage() {
         if (userStr) {
           const userData = JSON.parse(userStr);
           setUser(userData);
+          setLinkedElderId(userData.elderId || null);
           await fetchFamilyMembers(userData);
+        }
+        // Refresh user profile to get latest elderId
+        try {
+          const fresh = await apiGet<{ user: any }>('/users/me');
+          if (fresh?.user) {
+            setUser(fresh.user);
+            setLinkedElderId((prev) => fresh.user.elderId || prev || null);
+            await AsyncStorage.setItem('user', JSON.stringify(fresh.user));
+            await fetchFamilyMembers(fresh.user);
+          }
+        } catch (apiError) {
+          console.error('Error refreshing user profile:', apiError);
         }
       } catch (error) {
         console.error('Error loading user:', error);
@@ -66,11 +98,32 @@ export default function FamilyPage() {
     loadUser();
   }, []);
 
+  useEffect(() => {
+    if (relationOptions.length && !relation) {
+      setRelation(relationOptions[0]);
+    }
+  }, [relationOptions, relation]);
+
   const fetchFamilyMembers = async (userData: any) => {
     try {
       setLoading(true);
-      const response = await apiGet<{ members: FamilyMember[] }>('/family');
-      setFamily(response.members || []);
+      const response = await apiGet<{ members: any[] }>('/family');
+      const members = (response.members || []).map((member) => ({
+        _id: member._id,
+        name: member.name,
+        relation: member.relation,
+        phone: member.phone,
+      }));
+      setFamily(members);
+      
+      // Extract elderId from family members if user is family role
+      if (userData?.role?.toLowerCase() === 'family') {
+        const elderFromMember = response.members?.find((m) => m.elderId);
+        if (elderFromMember) {
+          const elder = elderFromMember.elderId;
+          setLinkedElderId(typeof elder === 'string' ? elder : elder?._id || null);
+        }
+      }
     } catch (error: any) {
       console.error('Error fetching family members:', error);
       Alert.alert("Error", error.message || "Failed to load family members");
@@ -79,9 +132,23 @@ export default function FamilyPage() {
     }
   };
 
+  const normalizePhone = (value: string) => value.replace(/[^\d+]/g, "");
+  const formatPhoneNumber = (value: string) => {
+    const cleaned = normalizePhone(value);
+    if (!cleaned) return "";
+    if (cleaned.startsWith("+")) return cleaned;
+    const withoutLeadingZero = cleaned.replace(/^0+/, "");
+    return `+94${withoutLeadingZero}`;
+  };
+
   if (!fontsLoaded) return null;
 
   const addFamily = async () => {
+    if (!canManageFamily) {
+      Alert.alert("Permission Required", "Only elder or family profiles can add connections.");
+      return;
+    }
+
     if (!phone || !relation || !name) {
       Alert.alert("Error", "Please fill all fields");
       return;
@@ -92,22 +159,81 @@ export default function FamilyPage() {
       return;
     }
 
+    const formattedPhone = formatPhoneNumber(phone);
+    if (!formattedPhone.startsWith("+") || formattedPhone.length < 11) {
+      Alert.alert("Invalid Number", "Please include the country code (e.g., +94XXXXXXXXX).");
+      return;
+    }
+
+    const normalizedComparison = formattedPhone.replace(/^\+/, "");
+    if (family.some((member) => normalizePhone(member.phone).replace(/^\+/, "") === normalizedComparison)) {
+      Alert.alert("Duplicate Number", "This phone number is already linked to another family account.");
+      return;
+    }
+
+    if (user.phoneNumber && normalizePhone(user.phoneNumber).replace(/^\+/, "") === normalizedComparison) {
+      Alert.alert("Invalid Number", "You cannot add your own phone number as a family contact.");
+      return;
+    }
+
     setSaving(true);
     try {
-      const elderId = user.role === 'elder' ? user._id : user._id; // For now, use current user's ID
-      await apiPost('/family', {
-        elderId,
+      let elderId = user._id;
+      let requestBody: any = {
         name: name.trim(),
-        phone: phone.trim(),
-        relation: relation.trim(),
-      });
+        phone: formattedPhone,
+        relation: relation?.trim() || "Family Member",
+      };
+
+      // If relation is "Elder", don't send elderId - backend will create elder account
+      if (relation?.toLowerCase() === "elder") {
+        // Backend will create elder account and link it
+        requestBody.relation = "Elder";
+      } else {
+        // For other relations, need elderId
+        if (normalizedRole.includes("family")) {
+          const resolvedElderId = user.elderId || linkedElderId;
+          if (!resolvedElderId) {
+            Alert.alert(
+              "Missing Elder Link",
+              "Please add an elder first by selecting 'Elder' as the relation. This will create the elder account and link it to your family profile."
+            );
+            setSaving(false);
+            return;
+          }
+          elderId = resolvedElderId;
+        }
+        requestBody.elderId = elderId;
+      }
+
+      const response = await apiPost<{ member: any; elderUser?: any }>('/family', requestBody);
+      
+      // If elder was created, update family user's elderId
+      if (relation?.toLowerCase() === "elder" && response.elderUser) {
+        const elderUserId = response.elderUser._id || response.elderUser.id;
+        if (elderUserId && normalizedRole.includes("family")) {
+          // Update family user with elderId
+          try {
+            const updatedUser = await apiGet<{ user: any }>('/users/me');
+            if (updatedUser?.user) {
+              setUser(updatedUser.user);
+              setLinkedElderId(updatedUser.user.elderId || elderUserId);
+              await AsyncStorage.setItem('user', JSON.stringify(updatedUser.user));
+            }
+          } catch (updateError) {
+            console.error('Error updating user profile:', updateError);
+          }
+        }
+      }
       
       // Refresh the list
       await fetchFamilyMembers(user);
       setPhone("");
       setRelation("");
       setName("");
-      Alert.alert("Success", "Family member added successfully!");
+      Alert.alert("Success", relation?.toLowerCase() === "elder" 
+        ? "Elder account created and linked successfully! The elder can now login with their phone number."
+        : "Family member added successfully!");
     } catch (error: any) {
       console.error('Error adding family member:', error);
       Alert.alert("Error", error.message || "Failed to add family member");
@@ -184,6 +310,14 @@ export default function FamilyPage() {
 
       {/* Inputs */}
       <View style={styles.inputSection}>
+        {!canManageFamily && (
+          <View style={styles.permissionBanner}>
+            <Ionicons name="alert-circle" size={20} color="#B00020" />
+            <Text style={styles.permissionText}>
+              Only elder or family profiles can add or edit members on this device. Please switch accounts if you need to manage them.
+            </Text>
+          </View>
+        )}
         <AppTextInput
           placeholder="Phone Number"
           placeholderTextColor="#406B63"
@@ -191,26 +325,38 @@ export default function FamilyPage() {
           onChangeText={setPhone}
           style={styles.input}
           keyboardType="phone-pad"
+          editable={canManageFamily}
         />
-        <AppTextInput
-          placeholder="Relation"
-          placeholderTextColor="#406B63"
-          value={relation}
-          onChangeText={setRelation}
-          style={styles.input}
-        />
+        <TouchableOpacity
+          style={[styles.input, styles.relationPicker]}
+          onPress={() => {
+            if (!canManageFamily) {
+              Alert.alert("Permission Required", "Only elder or family profiles can change relation.");
+              return;
+            }
+            setRelationPickerVisible(true);
+          }}
+          activeOpacity={0.8}
+          disabled={!canManageFamily}
+        >
+          <Text style={relation ? styles.relationText : styles.relationPlaceholder}>
+            {relation || "Select Relation"}
+          </Text>
+          <Ionicons name="chevron-down" size={18} color="#406B63" />
+        </TouchableOpacity>
         <AppTextInput
           placeholder="Name"
           placeholderTextColor="#406B63"
           value={name}
           onChangeText={setName}
           style={styles.input}
+          editable={canManageFamily}
         />
 
         <TouchableOpacity 
-          style={[styles.connectBtn, saving && styles.connectBtnDisabled]} 
+          style={[styles.connectBtn, (saving || !canManageFamily) && styles.connectBtnDisabled]} 
           onPress={addFamily}
-          disabled={saving}
+          disabled={saving || !canManageFamily}
         >
           {saving ? (
             <ActivityIndicator size="small" color="#fff" />
@@ -219,6 +365,41 @@ export default function FamilyPage() {
           )}
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={relationPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRelationPickerVisible(false)}
+      >
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <Text style={styles.pickerTitle}>Select Relation</Text>
+            {relationOptions.map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={styles.pickerOption}
+                onPress={() => {
+                  setRelation(option);
+                  setRelationPickerVisible(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.pickerOptionText,
+                    relation === option && styles.pickerOptionSelected,
+                  ]}
+                >
+                  {option}
+                </Text>
+                {relation === option && (
+                  <Ionicons name="checkmark" size={18} color="#04302B" />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
 
       {/* Family List */}
       {loading ? (
@@ -355,5 +536,67 @@ const styles = StyleSheet.create({
     fontFamily: "ArimaMadurai_400Regular",
     fontSize: 12,
     marginTop: 2,
+  },
+  permissionBanner: {
+    flexDirection: "row",
+    backgroundColor: "#FEEFEF",
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+    marginBottom: 8,
+    alignItems: "flex-start",
+  },
+  permissionText: {
+    flex: 1,
+    color: "#7A1F1F",
+    fontFamily: "ArimaMadurai_400Regular",
+  },
+  relationPicker: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  relationText: {
+    fontFamily: "ArimaMadurai_700Bold",
+    color: "#04302B",
+  },
+  relationPlaceholder: {
+    fontFamily: "ArimaMadurai_400Regular",
+    color: "#406B63",
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 30,
+  },
+  pickerCard: {
+    backgroundColor: "#FFFFFF",
+    width: "100%",
+    borderRadius: 16,
+    padding: 20,
+  },
+  pickerTitle: {
+    fontFamily: "ArimaMadurai_700Bold",
+    fontSize: 18,
+    color: "#04302B",
+    marginBottom: 10,
+  },
+  pickerOption: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E6E3",
+  },
+  pickerOptionText: {
+    fontFamily: "ArimaMadurai_400Regular",
+    color: "#04302B",
+    fontSize: 16,
+  },
+  pickerOptionSelected: {
+    fontFamily: "ArimaMadurai_700Bold",
   },
 });

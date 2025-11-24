@@ -99,6 +99,7 @@ export default function OtpScreen() {
       await AsyncStorage.setItem('accessToken', response.accessToken);
       await AsyncStorage.setItem('refreshToken', response.refreshToken);
       await AsyncStorage.setItem('user', JSON.stringify(response.user));
+      await AsyncStorage.setItem('sessionStartedAt', Date.now().toString());
 
       setLoading(false);
 

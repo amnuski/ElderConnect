@@ -134,7 +134,7 @@ export default function SettingsScreen() {
               <MenuItem 
                 title="Add Family Members" 
                 icon="people-outline" 
-                onPress={() => router.push('/setting/addFamily')} 
+                onPress={() => router.push('/setting/addfamily')} 
               />
               <MenuItem 
                 title="View Drivers" 
